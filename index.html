@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ПМД-Статус — Калькулятор сухих смесей</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --surface: #ffffff; --surface-hover: #f0f0f2; --surface-elevated: #fafafa;
+    --border: #e0e0e5; --border-subtle: #f0f0f2; --border-strong: #c7c7cc;
+    --text-primary: #1a1a1a; --text-secondary: #6e6e73; --text-tertiary: #8e8e93; --text-quaternary: #c7c7cc;
+    --accent: #0071e3; --accent-hover: #005bb5; --accent-light: rgba(0,113,227,0.08);
+    --positive: #34c759; --positive-light: rgba(52,199,89,0.08);
+    --warning: #ff9500; --warning-light: rgba(255,149,0,0.08);
+    --danger: #ff3b30; --danger-light: rgba(255,59,48,0.08);
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px; --radius-xl: 20px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.5; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+  /* Auth Screen */
+  .auth-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .auth-card { background: var(--surface); border-radius: var(--radius-xl); padding: 40px; width: 100%; max-width: 420px; box-shadow: var(--shadow-lg); }
+  .auth-logo { font-size: 28px; font-weight: 700; text-align: center; margin-bottom: 8px; letter-spacing: -0.5px; }
+  .auth-logo span { color: var(--accent); }
+  .auth-subtitle { text-align: center; color: var(--text-secondary); font-size: 14px; margin-bottom: 32px; }
+  .auth-form { display: flex; flex-direction: column; gap: 16px; }
+  .auth-input { padding: 12px 16px; border: 1.5px solid var(--border); border-radius: var(--radius-md); font-size: 15px; background: var(--bg); transition: all 0.2s; }
+  .auth-input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-light); outline: none; }
+  .auth-btn { padding: 14px; border-radius: var(--radius-md); border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .auth-btn-primary { background: var(--accent); color: #fff; }
+  .auth-btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  .auth-btn-secondary { background: transparent; color: var(--accent); border: 1.5px solid var(--border); }
+  .auth-btn-secondary:hover { background: var(--surface-hover); }
+  .auth-divider { display: flex; align-items: center; gap: 12px; margin: 8px 0; color: var(--text-tertiary); font-size: 13px; }
+  .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .auth-toggle { text-align: center; font-size: 14px; color: var(--text-secondary); }
+  .auth-toggle a { color: var(--accent); cursor: pointer; font-weight: 500; }
+  .auth-toggle a:hover { text-decoration: underline; }
+  .auth-error { background: var(--danger-light); color: var(--danger); padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; display: none; }
+  .auth-success { background: var(--positive-light); color: #1a7a3a; padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; display: none; }
+  .auth-hint { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
+
+  /* App Header */
+  .app-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .app-logo { font-size: 22px; font-weight: 700; }
+  .app-logo span { color: var(--accent); }
+  .app-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); }
+  .app-user-email { font-weight: 500; color: var(--text-primary); }
+  .project-selector { padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface); font-size: 13px; cursor: pointer; min-width: 180px; }
+  .header-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 20px; background: var(--surface); padding: 6px; border-radius: var(--radius-lg); box-shadow: var(--shadow); position: sticky; top: 10px; z-index: 100; }
+  .tab { padding: 10px 18px; border-radius: var(--radius-md); border: none; background: transparent; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-secondary); transition: all 0.2s; font-family: inherit; }
+  .tab:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .tab.active { background: var(--text-primary); color: var(--surface); }
+
+  /* Panels */
+  .panel { display: none; animation: fadeIn 0.3s ease; }
+  .panel.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Cards */
+  .card { background: var(--surface); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow); }
+  .card-title { font-size: 17px; font-weight: 600; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .card-subtitle { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; padding: 10px 12px; font-weight: 600; color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1.5px solid var(--border); white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
+  tr:hover td { background: var(--surface-hover); }
+  tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Inputs */
+  input, select, textarea {
+    font-family: inherit; font-size: 14px; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    background: var(--bg); color: var(--text-primary); outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+  input::placeholder { color: var(--text-quaternary); }
+  input.num { text-align: right; font-variant-numeric: tabular-nums; }
+  select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236e6e73' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; cursor: pointer; }
+
+  /* Buttons */
+  .btn {
+    font-family: inherit; font-size: 14px; font-weight: 500; padding: 9px 18px;
+    border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-primary); cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { background: var(--surface-hover); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .btn:active { transform: translateY(0); }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-danger { background: var(--danger-light); color: var(--danger); border-color: rgba(255,59,48,0.2); }
+  .btn-danger:hover { background: rgba(255,59,48,0.15); }
+  .btn-success { background: var(--positive-light); color: #1a7a3a; border-color: rgba(52,199,89,0.2); }
+  .btn-success:hover { background: rgba(52,199,89,0.15); }
+  .btn-sm { padding: 5px 12px; font-size: 13px; }
+  .btn-xs { padding: 3px 8px; font-size: 12px; }
+  .btn-ghost { background: transparent; border-color: transparent; }
+  .btn-ghost:hover { background: var(--surface-hover); }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 900px) { .grid-4 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+  /* Form */
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .form-group.inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .form-group.inline label { margin-bottom: 0; min-width: 140px; text-transform: none; font-size: 14px; font-weight: 400; }
+  .form-group.inline input, .form-group.inline select { flex: 1; min-width: 150px; }
+
+  /* Badges */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; }
+  .badge-ok { background: var(--positive-light); color: #1a7a3a; }
+  .badge-warn { background: var(--warning-light); color: #b36b00; }
+  .badge-err { background: var(--danger-light); color: #c41e14; }
+  .badge-info { background: var(--accent-light); color: #005bb5; }
+  .badge-neutral { background: var(--surface-hover); color: var(--text-secondary); }
+
+  /* Progress */
+  .progress-bar { height: 5px; border-radius: 3px; background: var(--border-subtle); overflow: hidden; margin-top: 5px; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .fill-ok { background: var(--positive); }
+  .fill-warn { background: var(--warning); }
+  .fill-err { background: var(--danger); }
+
+  /* Summary */
+  .summary-box { background: var(--positive-light); border: 1px solid rgba(52,199,89,0.15); border-radius: var(--radius-md); padding: 16px; margin-top: 12px; }
+  .summary-box-neg { background: var(--danger-light); border-color: rgba(255,59,48,0.15); }
+  .summary-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 14px; }
+  .summary-row.sum { font-weight: 600; font-size: 16px; border-top: 1px solid var(--border-subtle); margin-top: 6px; padding-top: 10px; }
+  .summary-row .label { color: var(--text-secondary); }
+  .summary-row .value { font-variant-numeric: tabular-nums; }
+
+  /* History */
+  .hist-item { position: relative; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .hist-item:last-child { border-bottom: none; }
+  .hist-item .actions { opacity: 0; transition: opacity 0.2s; }
+  .hist-item:hover .actions { opacity: 1; }
+  .hist-meta { font-size: 12px; color: var(--text-tertiary); }
+  .hist-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Supplier card */
+  .sup-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-bottom: 12px; }
+  .sup-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .sup-card-title { font-weight: 600; font-size: 15px; }
+  .sup-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+  @media (max-width: 900px) { .sup-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 500px) { .sup-grid { grid-template-columns: 1fr; } }
+
+  /* Messages */
+  .msg { padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; margin-top: 10px; display: none; }
+  .msg-err { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(255,59,48,0.15); }
+  .msg-ok { background: var(--positive-light); color: #1a7a3a; border: 1px solid rgba(52,199,89,0.15); }
+  .msg-info { background: var(--accent-light); color: #005bb5; border: 1px solid rgba(0,113,227,0.15); }
+  .msg-warn { background: var(--warning-light); color: #b36b00; border: 1px solid rgba(255,149,0,0.15); }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; backdrop-filter: blur(4px); }
+  .modal-overlay.active { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius-xl); padding: 28px; max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+  .modal-title { font-size: 20px; font-weight: 700; margin-bottom: 20px; letter-spacing: -0.3px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+  .modal-section { margin-bottom: 20px; }
+  .modal-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .modal-hint { font-size: 13px; color: var(--text-tertiary); margin-top: 6px; line-height: 1.5; }
+  .code-box { background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 12px 16px; font-family: monospace; font-size: 13px; word-break: break-all; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--text-primary); color: var(--surface); padding: 12px 20px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; box-shadow: 0 8px 24px rgba(0,0,0,0.15); transform: translateY(100px); opacity: 0; transition: all 0.3s ease; z-index: 2000; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* Divider */
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+  .section { margin-bottom: 20px; }
+  .h3 { font-size: 16px; font-weight: 600; margin: 0 0 10px 0; }
+  .h4 { font-size: 14px; font-weight: 600; margin: 0 0 8px 0; }
+
+  /* Empty */
+  .empty { text-align: center; padding: 30px; color: var(--text-tertiary); font-size: 14px; }
+
+  /* Loading */
+  .loading-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 3000; transition: opacity 0.3s; }
+  .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { margin-top: 16px; color: var(--text-secondary); font-size: 14px; }
+
+  /* Member list */
+  .member-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+  .member-row:last-child { border-bottom: none; }
+  .member-info { display: flex; flex-direction: column; gap: 2px; }
+  .member-email { font-weight: 500; font-size: 14px; }
+  .member-role { font-size: 12px; color: var(--text-tertiary); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--text-quaternary); border-radius: 3px; }
+
+  /* Print */
+  @media print { body { background: #fff; padding: 0; } .tabs, .header-actions, .btn, .actions, .auth-screen { display: none !important; } .card { box-shadow: none; border: 1px solid #ddd; } }
+
+  /* Offline indicator */
+  .offline-bar { position: fixed; top: 0; left: 0; right: 0; background: var(--warning); color: #fff; text-align: center; padding: 6px; font-size: 13px; font-weight: 500; z-index: 5000; display: none; }
+  .offline-bar.show { display: block; }
+</style>
+</head>
+<body>
+<div class="offline-bar" id="offline-bar">⚠️ Нет подключения к интернету. Данные сохранятся локально и синхронизируются при восстановлении связи.</div>
+
+<!-- Loading Screen -->
+<div class="loading-overlay" id="loading-screen">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Загрузка...</div>
+</div>
+
+<!-- Auth Screen -->
+<div class="auth-screen" id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">ПМД-<span>Статус</span></div>
+    <div class="auth-subtitle" id="auth-subtitle">Вход в систему</div>
+
+    <div class="auth-error" id="auth-error"></div>
+    <div class="auth-success" id="auth-success"></div>
+
+    <div class="auth-form" id="auth-form-login">
+      <input type="email" class="auth-input" id="login-email" placeholder="Email" autocomplete="email">
+      <input type="password" class="auth-input" id="login-password" placeholder="Пароль" autocomplete="current-password">
+      <button class="auth-btn auth-btn-primary" onclick="login()">Войти</button>
+      <div class="auth-divider">или</div>
+      <button class="auth-btn auth-btn-secondary" onclick="showRegister()">Создать аккаунт</button>
+    </div>
+
+    <div class="auth-form" id="auth-form-register" style="display:none">
+      <input type="email" class="auth-input" id="reg-email" placeholder="Email" autocomplete="email">
+      <input type="password" class="auth-input" id="reg-password" placeholder="Пароль (минимум 6 символов)" autocomplete="new-password">
+      <div class="auth-hint">Пароль должен содержать минимум 6 символов</div>
+      <input type="password" class="auth-input" id="reg-password2" placeholder="Повторите пароль" autocomplete="new-password">
+      <button class="auth-btn auth-btn-primary" onclick="register()">Зарегистрироваться</button>
+      <div class="auth-divider">или</div>
+      <button class="auth-btn auth-btn-secondary" onclick="showLogin()">Уже есть аккаунт</button>
+      <div style="text-align:center;margin-top:12px">
+        <a onclick="showJoin()" style="color:var(--accent);cursor:pointer;font-size:14px;font-weight:500">Присоединиться к существующему проекту →</a>
+      </div>
+    </div>
+
+    <div class="auth-form" id="auth-form-join" style="display:none">
+      <div class="modal-hint" style="margin-bottom:12px">Введите код проекта, который вам дал владелец, чтобы получить доступ к его данным.</div>
+      <input type="text" class="auth-input" id="join-code" placeholder="Код проекта (например: AbC123XyZ)" style="text-transform:uppercase">
+      <button class="auth-btn auth-btn-primary" onclick="joinProject()">Присоединиться</button>
+      <div class="auth-divider">или</div>
+      <button class="auth-btn auth-btn-secondary" onclick="showLogin()">Назад ко входу</button>
+    </div>
+  </div>
+</div>
+
+<!-- App Screen -->
+<div class="container" id="app-screen" style="display:none">
+  <div class="app-header">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div class="app-logo">ПМД-<span>Статус</span></div>
+      <select class="project-selector" id="project-selector" onchange="switchProject(this.value)">
+        <option value="">Загрузка...</option>
+      </select>
+    </div>
+    <div class="header-actions">
+      <div class="app-user">
+        <span class="app-user-email" id="user-email"></span>
+        <span class="badge badge-neutral" id="user-role-badge">владелец</span>
+      </div>
+      <button class="btn btn-sm btn-ghost" onclick="showAdminModal()" id="btn-admin" title="Управление доступом">👥 Админ</button>
+      <button class="btn btn-sm" onclick="showBackupModal()">💾 Бэкап</button>
+      <button class="btn btn-sm btn-primary" onclick="logout()">Выйти</button>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="recipe">1. Рецепт</button>
+    <button class="tab" data-tab="receipt">2. Приёмка</button>
+    <button class="tab" data-tab="stock">3. Склад</button>
+    <button class="tab" data-tab="suppliers">4. Поставщики</button>
+    <button class="tab" data-tab="mixer">5. Замес</button>
+    <button class="tab" data-tab="annual">6. Годовой план</button>
+  </div>
+
+  <!-- === РЕЦЕПТ === -->
+  <div class="panel active" id="panel-recipe">
+    <div class="card">
+      <div class="card-title">
+        <span>Рецепт ПМД-Статус</span>
+        <button class="btn btn-sm" id="recipe-edit-btn" onclick="toggleRecipeEdit()">✏️ Редактировать</button>
+      </div>
+      <div id="recipe-content"></div>
+      <div class="msg msg-err" id="recipe-error"></div>
+    </div>
+  </div>
+
+  <!-- === ПРИЁМКА === -->
+  <div class="panel" id="panel-receipt">
+    <div class="card">
+      <div class="card-title">Новая приёмка материала</div>
+      <div class="grid-3">
+        <div class="form-group">
+          <label>Материал</label>
+          <select id="receipt-comp" onchange="updateReceiptSuppliers()"></select>
+        </div>
+        <div class="form-group">
+          <label>Количество, кг</label>
+          <input type="number" class="num" id="receipt-qty" min="0" step="100" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Поставщик</label>
+          <select id="receipt-sup"><option value="">Сначала выберите материал</option></select>
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="form-group">
+          <label>Цена материала, р/кг</label>
+          <input type="number" class="num" id="receipt-price" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Доставка, р/кг</label>
+          <input type="number" class="num" id="receipt-delivery" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Дата приёмки</label>
+          <input type="date" id="receipt-date">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="addReceipt()">➕ Добавить приёмку</button>
+      <div class="msg" id="receipt-msg"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">История приёмок</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Дата</th><th>Материал</th><th class="num">Кол-во, кг</th><th class="num">Цена, р/кг</th><th class="num">Доставка, р/кг</th><th class="num">Итого, р/кг</th><th>Поставщик</th><th></th></tr></thead>
+          <tbody id="receipt-history"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="receipt-empty" style="display:none">Приёмок пока нет</div>
+    </div>
+  </div>
+
+  <!-- === СКЛАД === -->
+  <div class="panel" id="panel-stock">
+    <div class="card">
+      <div class="card-title">Текущие остатки</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Компонент</th><th class="num">Начальный, кг</th><th class="num">Приход, кг</th><th class="num">Расход, кг</th><th class="num">Текущий, кг</th></tr></thead>
+          <tbody id="stock-body"></tbody>
+        </table>
+      </div>
+      <div class="card-subtitle">Начальный остаток вводится вручную. Приход = сумма приёмок. Расход = сумма замесов.</div>
+    </div>
+  </div>
+
+  <!-- === ПОСТАВЩИКИ === -->
+  <div class="panel" id="panel-suppliers">
+    <div class="card">
+      <div class="card-title">Поставщики по компонентам</div>
+      <div id="suppliers-body"></div>
+    </div>
+  </div>
+
+  <!-- === ЗАМЕС === -->
+  <div class="panel" id="panel-mixer">
+    <div class="card">
+      <div class="card-title">Параметры замеса</div>
+      <div class="grid-3">
+        <div class="form-group">
+          <label>Нужно ПМД, кг</label>
+          <input type="number" class="num" id="mixer-target" value="20000" min="0" step="1000" oninput="calcMixer()">
+        </div>
+        <div class="form-group">
+          <label>Дата замеса</label>
+          <input type="date" id="mixer-date">
+        </div>
+        <div class="form-group">
+          <label>Толлинг Цемторг, р/кг</label>
+          <input type="number" class="num" id="mixer-tolling" value="2" min="0" step="0.1" oninput="calcMixer()">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="doBatch()">⚙️ Замес произошёл</button>
+      <div class="msg" id="mixer-msg"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Расчёт компонентов</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Компонент</th><th class="num">Нужно, кг</th><th class="num">На складе, кг</th><th class="num">Не хватает, кг</th><th>Статус</th></tr></thead>
+          <tbody id="mixer-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Рекомендации по закупке</div>
+      <div id="mixer-recommend"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Себестоимость замеса</div>
+      <div id="mixer-cost"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">История замесов</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>№</th><th>Дата</th><th class="num">ПМД, кг</th><th class="num">Себест., руб</th><th></th></tr></thead>
+          <tbody id="batch-history"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="batch-empty" style="display:none">Замесов пока нет</div>
+    </div>
+  </div>
+
+  <!-- === ГОДОВОЙ ПЛАН === -->
+  <div class="panel" id="panel-annual">
+    <div class="card">
+      <div class="card-title">Годовой план производства</div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Цель на 2026, кг</label>
+          <input type="number" class="num" id="annual-target" value="1015000" min="0" step="1000" oninput="calcAnnual()">
+        </div>
+        <div class="form-group">
+          <label>Толлинг Цемторг, р/кг</label>
+          <input type="number" class="num" id="annual-tolling" value="2" min="0" step="0.1" oninput="calcAnnual()">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Общая потребность компонентов</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Компонент</th><th class="num">Всего нужно, кг</th><th class="num">На складе, кг</th><th class="num">Докупить, кг</th><th>Статус</th></tr></thead>
+          <tbody id="annual-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Рекомендации по закупке</div>
+      <div id="annual-recommend"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Итоговая себестоимость</div>
+      <div id="annual-cost"></div>
+    </div>
+  </div>
+</div>
+
+<!-- === MODAL: АДМИН === -->
+<div class="modal-overlay" id="modal-admin">
+  <div class="modal">
+    <div class="modal-title">👥 Управление доступом</div>
+
+    <div class="modal-section">
+      <div class="modal-label">Код вашего проекта</div>
+      <div class="code-box">
+        <span id="admin-project-id">—</span>
+        <button class="btn btn-sm" onclick="copyProjectId()">📋 Копировать</button>
+      </div>
+      <div class="modal-hint">Отправьте этот код человеку, которому хотите дать доступ. Он введёт его при входе в разделе "Присоединиться к проекту".</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="modal-section">
+      <div class="modal-label">Добавить пользователя</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="email" id="admin-add-email" placeholder="Email пользователя" style="flex:1;min-width:200px">
+        <select id="admin-add-role" style="width:140px">
+          <option value="editor">Редактор</option>
+          <option value="viewer">Только просмотр</option>
+        </select>
+        <button class="btn btn-primary" onclick="addMember()">Добавить</button>
+      </div>
+      <div class="msg" id="admin-add-msg"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="modal-section">
+      <div class="modal-label">Пользователи с доступом</div>
+      <div id="admin-members-list"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-admin')">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- === MODAL: БЭКАП === -->
+<div class="modal-overlay" id="modal-backup">
+  <div class="modal">
+    <div class="modal-title">💾 Бэкап и восстановление</div>
+    <div class="modal-section">
+      <div class="modal-label">Создать бэкап</div>
+      <button class="btn btn-primary" onclick="exportBackup()">📥 Скачать бэкап (.json)</button>
+      <div class="modal-hint">Сохранит все данные текущего проекта на ваш компьютер.</div>
+    </div>
+    <div class="divider"></div>
+    <div class="modal-section">
+      <div class="modal-label">Восстановить из бэкапа</div>
+      <input type="file" id="backup-file" accept=".json" onchange="importBackup(this)">
+      <div class="modal-hint">Выберите ранее сохранённый .json файл. Текущие данные проекта будут заменены!</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-backup')">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<script>
+// ==================== FIREBASE CONFIG ====================
+// ⚠️ ВСТАВЬТЕ СВОИ ДАННЫЕ ИЗ КОНСОЛИ FIREBASE (см. инструкцию в README)
+const firebaseConfig = {
+  apiKey: "AIzaSyB17PQvSy6t-0f0MA-31qb63gpEqrs6LWg",
+ authDomain: "pmd-calc.firebaseapp.com",
+ projectId: "pmd-calc",
+ storageBucket: "pmd-calc.firebasestorage.app",
+ messagingSenderId: "894300834230",
+ appId: "1:894300834230:web:2852cf9c9ace43f0af5917",
+ measurementId: "G-HHMYVYYG8Z"
+  };
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Enable offline persistence
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+  console.warn('Persistence failed:', err.code);
+});
+
+// ==================== STATE ====================
+let currentUser = null;
+let currentProjectId = null;
+let userRole = 'owner'; // owner, editor, viewer
+let userProjects = []; // [{projectId, role, ownerEmail}]
+let unsubscribeProject = null;
+let unsubscribeMembers = null;
+
+let appData = {
+  recipe: [
+    { id:'slag', name:'Шлак молотый', pct:38, per1000:380 },
+    { id:'lime', name:'Известь негашеная', pct:30, per1000:300 },
+    { id:'mku', name:'МКУ-85', pct:12, per1000:120 },
+    { id:'sand', name:'Кварцевый песок молотый', pct:8, per1000:80 },
+    { id:'mineral', name:'Минеральный порошок', pct:5, per1000:50 },
+    { id:'fluorite', name:'Плавиковый шпат', pct:3, per1000:30 },
+    { id:'lignin', name:'Лигносульфонат', pct:4, per1000:40 }
+  ],
+  initialStock: {},
+  receipts: [],
+  batches: [],
+  suppliers: {},
+  batchCounter: 1,
+  settings: { annualTarget: 1015000, tollingPrice: 2 }
+};
+
+let recipeEditMode = false;
+let pendingSave = false;
+let saveTimeout = null;
+
+// ==================== AUTH ====================
+function showLogin() {
+  document.getElementById('auth-form-login').style.display = 'flex';
+  document.getElementById('auth-form-register').style.display = 'none';
+  document.getElementById('auth-form-join').style.display = 'none';
+  document.getElementById('auth-subtitle').textContent = 'Вход в систему';
+  hideAuthMessages();
+}
+
+function showRegister() {
+  document.getElementById('auth-form-login').style.display = 'none';
+  document.getElementById('auth-form-register').style.display = 'flex';
+  document.getElementById('auth-form-join').style.display = 'none';
+  document.getElementById('auth-subtitle').textContent = 'Создание аккаунта';
+  hideAuthMessages();
+}
+
+function showAdminModal() {
+  if (userRole !== 'owner') {
+    showToast('Только владелец может управлять доступом');
+    return;
+  }
+  // Get project ID from currentProjectId or from Firestore
+  if (!currentProjectId) {
+    showToast('Сначала загрузите проект');
+    return;
+  }
+  document.getElementById('admin-project-id').textContent = currentProjectId;
+  loadMembersList();
+  document.getElementById('modal-admin').classList.add('active');
+}
+
+function showJoin() {
+  document.getElementById('auth-form-login').style.display = 'none';
+  document.getElementById('auth-form-register').style.display = 'none';
+  document.getElementById('auth-form-join').style.display = 'flex';
+  document.getElementById('auth-subtitle').textContent = 'Присоединиться к проекту';
+  hideAuthMessages();
+}
+
+function hideAuthMessages() {
+  document.getElementById('auth-error').style.display = 'none';
+  document.getElementById('auth-success').style.display = 'none';
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  document.getElementById('auth-success').style.display = 'none';
+}
+
+function showAuthSuccess(msg) {
+  const el = document.getElementById('auth-success');
+  el.textContent = msg;
+  el.style.display = 'block';
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+function register() {
+  const email = document.getElementById('reg-email').value.trim();
+  const pass = document.getElementById('reg-password').value;
+  const pass2 = document.getElementById('reg-password2').value;
+
+  if (!email || !pass) { showAuthError('Введите email и пароль'); return; }
+  if (pass.length < 6) { showAuthError('Пароль должен быть минимум 6 символов'); return; }
+  if (pass !== pass2) { showAuthError('Пароли не совпадают'); return; }
+
+  auth.createUserWithEmailAndPassword(email, pass)
+    .then(cred => {
+      showAuthSuccess('Аккаунт создан! Настройка проекта...');
+      const uid = cred.user.uid;
+      // Create user profile with project and data in ONE document (flat structure)
+      return db.collection('users').doc(uid).set({
+        email: email,
+        projects: {
+          [uid]: { role: 'owner', createdAt: new Date().toISOString() }
+        },
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        // Create project document with data
+        return db.collection('projects').doc(uid).set({
+          ownerId: uid,
+          data: appData,
+          members: {},
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }).then(() => {
+        // Set current project and switch to it immediately
+        currentUser = cred.user;
+        currentProjectId = uid;
+        userRole = 'owner';
+        userProjects = [{ projectId: uid, role: 'owner' }];
+        showAppScreen();
+        updateProjectSelector();
+        switchProject(uid);
+      });
+    })
+    .catch(err => showAuthError(translateFirebaseError(err)));
+}
+
+function login() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+
+  if (!email || !pass) { showAuthError('Введите email и пароль'); return; }
+
+  auth.signInWithEmailAndPassword(email, pass)
+    .catch(err => showAuthError(translateFirebaseError(err)));
+}
+
+function logout() {
+  auth.signOut();
+}
+
+function translateFirebaseError(err) {
+  const codes = {
+    'auth/invalid-email': 'Неверный формат email',
+    'auth/user-disabled': 'Аккаунт заблокирован',
+    'auth/user-not-found': 'Пользователь не найден',
+    'auth/wrong-password': 'Неверный пароль',
+    'auth/email-already-in-use': 'Этот email уже зарегистрирован',
+    'auth/weak-password': 'Пароль слишком простой',
+    'auth/invalid-credential': 'Неверный email или пароль',
+    'auth/too-many-requests': 'Слишком много попыток. Попробуйте позже.'
+  };
+  return codes[err.code] || err.message;
+}
+
+// ==================== PROJECT MANAGEMENT ====================
+function loadUserProjects() {
+  if (!currentUser) return;
+
+  // Load user profile with projects list (flat structure)
+  db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
+    if (doc.exists) {
+      const data = doc.data();
+      const projects = data.projects || {};
+      userProjects = Object.keys(projects).map(pid => ({
+        projectId: pid,
+        role: projects[pid].role || 'owner'
+      }));
+      updateProjectSelector();
+
+      // If no project selected, select first one
+      if (userProjects.length > 0 && !currentProjectId) {
+        switchProject(userProjects[0].projectId);
+      }
+    }
+  }, err => {
+    console.error('Error loading user projects:', err);
+  });
+}
+
+function updateProjectSelector() {
+  const sel = document.getElementById('project-selector');
+  sel.innerHTML = userProjects.map(p => {
+    const isOwner = p.role === 'owner';
+    const label = isOwner ? 'Мой проект' : `Проект ${p.projectId.substr(0,8)}...`;
+    return `<option value="${p.projectId}">${label} (${p.role === 'owner' ? 'владелец' : p.role === 'editor' ? 'редактор' : 'наблюдатель'})</option>`;
+  }).join('');
+
+  if (currentProjectId) {
+    sel.value = currentProjectId;
+  }
+}
+
+function switchProject(projectId) {
+  if (!projectId || projectId === currentProjectId) return;
+
+  // Unsubscribe from old project
+  if (unsubscribeProject) unsubscribeProject();
+  if (unsubscribeMembers) unsubscribeMembers();
+
+  currentProjectId = projectId;
+  const projectInfo = userProjects.find(p => p.projectId === projectId);
+  userRole = projectInfo ? projectInfo.role : 'editor';
+
+  // Update UI
+  document.getElementById('user-role-badge').textContent = 
+    userRole === 'owner' ? 'владелец' : userRole === 'editor' ? 'редактор' : 'наблюдатель';
+  document.getElementById('btn-admin').style.display = userRole === 'owner' ? 'inline-flex' : 'none';
+
+  // Set read-only mode for viewers
+  const inputs = document.querySelectorAll('input, select, button:not(.tab):not(.btn-ghost)');
+  inputs.forEach(el => {
+    if (userRole === 'viewer') {
+      el.disabled = true;
+    } else {
+      el.disabled = false;
+    }
+  });
+
+  // Subscribe to project data
+  unsubscribeProject = db.collection('projects').doc(projectId)
+    .onSnapshot(doc => {
+      if (doc.exists) {
+        const data = doc.data().data;
+        if (data) {
+          appData = { ...appData, ...data };
+          // Ensure all fields exist
+          if (!appData.recipe) appData.recipe = getDefaultRecipe();
+          if (!appData.initialStock) appData.initialStock = {};
+          if (!appData.receipts) appData.receipts = [];
+          if (!appData.batches) appData.batches = [];
+          if (!appData.suppliers) appData.suppliers = {};
+          if (!appData.batchCounter) appData.batchCounter = 1;
+          if (!appData.settings) appData.settings = { annualTarget: 1015000, tollingPrice: 2 };
+
+          renderAll();
+        }
+      } else {
+        // Project doesn't exist, create it
+        if (userRole === 'owner') {
+          saveProjectData();
+        }
+      }
+    }, err => {
+      console.error('Error loading project:', err);
+      showToast('Ошибка загрузки проекта');
+    });
+
+  // Update project selector
+  updateProjectSelector();
+
+  showToast('Проект загружен');
+}
+
+function getDefaultRecipe() {
+  return [
+    { id:'slag', name:'Шлак молотый', pct:38, per1000:380 },
+    { id:'lime', name:'Известь негашеная', pct:30, per1000:300 },
+    { id:'mku', name:'МКУ-85', pct:12, per1000:120 },
+    { id:'sand', name:'Кварцевый песок молотый', pct:8, per1000:80 },
+    { id:'mineral', name:'Минеральный порошок', pct:5, per1000:50 },
+    { id:'fluorite', name:'Плавиковый шпат', pct:3, per1000:30 },
+    { id:'lignin', name:'Лигносульфонат', pct:4, per1000:40 }
+  ];
+}
+
+function saveProjectData() {
+  if (!currentProjectId || !currentUser) return;
+  if (userRole === 'viewer') {
+    showToast('У вас права только на просмотр');
+    return;
+  }
+
+  // Debounce saves
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    db.collection('projects').doc(currentProjectId).set({
+      ownerId: currentUser.uid,
+      data: appData,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true }).then(() => {
+      showToast('Сохранено в облаке');
+    }).catch(err => {
+      console.error('Save error:', err);
+      showToast('Ошибка сохранения (данные сохранены локально)');
+    });
+  }, 500);
+}
+
+function joinProject() {
+  const code = document.getElementById('join-code').value.trim().toLowerCase();
+  if (!code) { showAuthError('Введите код проекта'); return; }
+
+  // Check if project exists
+  db.collection('projects').doc(code).get().then(doc => {
+    if (!doc.exists) {
+      showAuthError('Проект не найден. Проверьте код.');
+      return;
+    }
+
+    const projectData = doc.data();
+    const members = projectData.members || {};
+    const userEmail = currentUser.email.toLowerCase();
+
+    // Check if user is invited
+    let role = 'editor';
+    let invited = false;
+
+    Object.keys(members).forEach(mid => {
+      if (members[mid].email === userEmail && members[mid].status === 'pending') {
+        role = members[mid].role || 'editor';
+        invited = true;
+      }
+    });
+
+    if (!invited) {
+      showAuthError('Вы не приглашены в этот проект. Попросите владельца добавить ваш email.');
+      return;
+    }
+
+    // Update user profile with new project
+    const userRef = db.collection('users').doc(currentUser.uid);
+    return userRef.get().then(userDoc => {
+      const userData = userDoc.exists ? userDoc.data() : {};
+      const projects = userData.projects || {};
+      projects[code] = { role: role, joinedAt: new Date().toISOString() };
+
+      return userRef.set({ projects: projects }, { merge: true });
+    }).then(() => {
+      // Update project members
+      const newMembers = { ...members };
+      Object.keys(newMembers).forEach(mid => {
+        if (newMembers[mid].email === userEmail) {
+          newMembers[mid].status = 'active';
+          newMembers[mid].joinedAt = new Date().toISOString();
+        }
+      });
+
+      return db.collection('projects').doc(code).update({ members: newMembers });
+    }).then(() => {
+      showAuthSuccess('Вы присоединились к проекту! Переходим...');
+      setTimeout(() => {
+        switchProject(code);
+        showAppScreen();
+      }, 1000);
+    });
+  }).catch(err => {
+    showAuthError('Ошибка: ' + err.message);
+  });
+}
+
+// ==================== ADMIN ====================
+function loadMembersList() {
+  if (!currentProjectId) return;
+
+  const container = document.getElementById('admin-members-list');
+  container.innerHTML = '<div class="empty">Загрузка...</div>';
+
+  // Get project doc with members (flat structure)
+  db.collection('projects').doc(currentProjectId).get().then(projDoc => {
+    if (!projDoc.exists) {
+      container.innerHTML = '<div class="empty">Проект не найден</div>';
+      return;
+    }
+
+    const projectData = projDoc.data();
+    const ownerId = projectData.ownerId;
+    const members = projectData.members || {};
+
+    let html = '';
+
+    // Add owner first
+    if (ownerId && currentUser && ownerId === currentUser.uid) {
+      html += `
+        <div class="member-row">
+          <div class="member-info">
+            <div class="member-email">${currentUser.email} (вы)</div>
+            <div class="member-role">Владелец</div>
+          </div>
+          <span class="badge badge-neutral">владелец</span>
+        </div>
+      `;
+    }
+
+    // Add other members
+    Object.keys(members).forEach(mid => {
+      const data = members[mid];
+      const isYou = mid === currentUser.uid;
+      const isOwner = mid === ownerId;
+
+      if (isOwner) return; // Skip owner, already shown above
+
+      html += `
+        <div class="member-row">
+          <div class="member-info">
+            <div class="member-email">${data.email || 'Без email'}</div>
+            <div class="member-role">${data.role === 'owner' ? 'Владелец' : data.role === 'editor' ? 'Редактор' : 'Наблюдатель'}</div>
+          </div>
+          ${!isYou ? `<button class="btn btn-xs btn-danger" onclick="removeMember('${mid}', '${data.email || ''}')">Отозвать доступ</button>` : ''}
+        </div>
+      `;
+    });
+
+    if (html === '') {
+      container.innerHTML = '<div class="empty">Пока нет других пользователей</div>';
+    } else {
+      container.innerHTML = html;
+    }
+  }).catch(err => {
+    console.error('Error loading members:', err);
+    container.innerHTML = '<div class="empty">Ошибка загрузки: ' + err.message + '</div>';
+  });
+}
+
+function addMember() {
+  const email = document.getElementById('admin-add-email').value.trim().toLowerCase();
+  const role = document.getElementById('admin-add-role').value;
+  const msg = document.getElementById('admin-add-msg');
+
+  if (!email) {
+    msg.textContent = 'Введите email';
+    msg.className = 'msg msg-err';
+    msg.style.display = 'block';
+    return;
+  }
+
+  if (!currentProjectId) {
+    msg.textContent = 'Ошибка: проект не загружен';
+    msg.className = 'msg msg-err';
+    msg.style.display = 'block';
+    return;
+  }
+
+  // Add member to project (flat structure)
+  const memberId = 'member_' + Date.now();
+  db.collection('projects').doc(currentProjectId).get().then(doc => {
+    const data = doc.exists ? doc.data() : {};
+    const members = data.members || {};
+    members[memberId] = {
+      email: email,
+      role: role,
+      status: 'pending',
+      addedAt: new Date().toISOString()
+    };
+
+    return db.collection('projects').doc(currentProjectId).update({ members: members });
+  }).then(() => {
+    msg.textContent = 'Приглашение создано! Отправьте пользователю код проекта: ' + currentProjectId;
+    msg.className = 'msg msg-ok';
+    msg.style.display = 'block';
+    document.getElementById('admin-add-email').value = '';
+    loadMembersList();
+  }).catch(err => {
+    msg.textContent = 'Ошибка: ' + err.message;
+    msg.className = 'msg msg-err';
+    msg.style.display = 'block';
+  });
+}
+
+function removeMember(uid, email) {
+  if (!confirm('Отозвать доступ у этого пользователя?')) return;
+  if (!currentProjectId) return;
+
+  // Get current members and remove this one
+  db.collection('projects').doc(currentProjectId).get().then(doc => {
+    const data = doc.exists ? doc.data() : {};
+    const members = data.members || {};
+
+    // Find and remove member by email or uid
+    Object.keys(members).forEach(key => {
+      if (members[key].email === email || key === uid) {
+        delete members[key];
+      }
+    });
+
+    return db.collection('projects').doc(currentProjectId).update({ members: members });
+  }).then(() => {
+    loadMembersList();
+    showToast('Доступ отозван');
+  }).catch(err => {
+    showToast('Ошибка: ' + err.message);
+  });
+}
+
+function copyProjectId() {
+  navigator.clipboard.writeText(currentProjectId).then(() => {
+    showToast('Код скопирован!');
+  });
+}
+
+// ==================== AUTH STATE LISTENER ====================
+auth.onAuthStateChanged(user => {
+  if (user) {
+    // Only set if not already set (e.g., from register)
+    if (!currentUser) currentUser = user;
+    document.getElementById('user-email').textContent = user.email;
+    showAppScreen();
+    loadUserProjects();
+    // Delay checkInvitations to ensure projects are loaded
+    setTimeout(checkInvitations, 2000);
+  } else {
+    currentUser = null;
+    currentProjectId = null;
+    userRole = 'owner';
+    userProjects = [];
+    if (unsubscribeProject) unsubscribeProject();
+    if (unsubscribeMembers) unsubscribeMembers();
+    showAuthScreen();
+  }
+  document.getElementById('loading-screen').classList.add('hidden');
+});
+
+function showAuthScreen() {
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display = 'none';
+  showLogin();
+}
+
+function showAppScreen() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+}
+
+function checkInvitations() {
+  // Check if current user has any pending invitations
+  if (!currentUser || !currentUser.email) return;
+
+  const userEmail = currentUser.email.toLowerCase();
+
+  // Get all projects and check for invitations (flat structure)
+  db.collection('projects').get().then(snapshot => {
+    snapshot.forEach(doc => {
+      const projectId = doc.id;
+      const data = doc.data();
+      const members = data.members || {};
+
+      // Check if user is invited in this project
+      Object.keys(members).forEach(key => {
+        const member = members[key];
+        if (member.email === userEmail && member.status === 'pending') {
+          // Auto-accept: update member status and add to user profile
+          member.status = 'active';
+          member.joinedAt = new Date().toISOString();
+
+          // Update project
+          db.collection('projects').doc(projectId).update({ members: members });
+
+          // Add to user profile
+          db.collection('users').doc(currentUser.uid).get().then(userDoc => {
+            const userData = userDoc.exists ? userDoc.data() : {};
+            const projects = userData.projects || {};
+            projects[projectId] = { role: member.role || 'editor', joinedAt: new Date().toISOString() };
+            return db.collection('users').doc(currentUser.uid).set({ projects: projects }, { merge: true });
+          });
+        }
+      });
+    });
+  }).catch(err => console.log('No invitations or error:', err));
+}
+
+>
