@@ -668,23 +668,21 @@ function register() {
     .then(cred => {
       showAuthSuccess('Аккаунт создан! Настройка проекта...');
       const uid = cred.user.uid;
-      // Create user profile and project
+      // Create user profile with project and data in ONE document (flat structure)
       return db.collection('users').doc(uid).set({
         email: email,
+        projects: {
+          [uid]: { role: 'owner', createdAt: new Date().toISOString() }
+        },
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       }).then(() => {
-        // Create default project
+        // Create project document with data
         return db.collection('projects').doc(uid).set({
           ownerId: uid,
           data: appData,
+          members: {},
           createdAt: firebase.firestore.FieldValue.serverTimestamp(),
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      }).then(() => {
-        // Add to user's projects
-        return db.collection('userProjects').doc(uid).collection('projects').doc(uid).set({
-          role: 'owner',
-          addedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
       }).then(() => {
         // Set current project and switch to it immediately
@@ -732,26 +730,25 @@ function translateFirebaseError(err) {
 function loadUserProjects() {
   if (!currentUser) return;
 
-  db.collection('userProjects').doc(currentUser.uid).collection('projects')
-    .onSnapshot(snapshot => {
-      const oldProjects = userProjects;
-      userProjects = [];
-      snapshot.forEach(doc => {
-        userProjects.push({
-          projectId: doc.id,
-          role: doc.data().role || 'editor',
-          ...doc.data()
-        });
-      });
+  // Load user profile with projects list (flat structure)
+  db.collection('users').doc(currentUser.uid).onSnapshot(doc => {
+    if (doc.exists) {
+      const data = doc.data();
+      const projects = data.projects || {};
+      userProjects = Object.keys(projects).map(pid => ({
+        projectId: pid,
+        role: projects[pid].role || 'owner'
+      }));
       updateProjectSelector();
 
-      // If no project selected, or previously had no projects but now has, select first one
-      if (userProjects.length > 0 && (!currentProjectId || oldProjects.length === 0)) {
+      // If no project selected, select first one
+      if (userProjects.length > 0 && !currentProjectId) {
         switchProject(userProjects[0].projectId);
       }
-    }, err => {
-      console.error('Error loading projects:', err);
-    });
+    }
+  }, err => {
+    console.error('Error loading user projects:', err);
+  });
 }
 
 function updateProjectSelector() {
@@ -864,7 +861,7 @@ function saveProjectData() {
 }
 
 function joinProject() {
-  const code = document.getElementById('join-code').value.trim();
+  const code = document.getElementById('join-code').value.trim().toLowerCase();
   if (!code) { showAuthError('Введите код проекта'); return; }
 
   // Check if project exists
@@ -875,50 +872,51 @@ function joinProject() {
     }
 
     const projectData = doc.data();
-    const ownerId = projectData.ownerId;
-
-    // Check if there's a pending invitation for this user
+    const members = projectData.members || {};
     const userEmail = currentUser.email.toLowerCase();
 
-    db.collection('projects').doc(code).collection('invitations')
-      .where('email', '==', userEmail)
-      .where('status', '==', 'pending')
-      .get()
-      .then(inviteSnapshot => {
-        let role = 'editor'; // default role
+    // Check if user is invited
+    let role = 'editor';
+    let invited = false;
 
-        if (!inviteSnapshot.empty) {
-          // Use invitation role
-          inviteSnapshot.forEach(inviteDoc => {
-            role = inviteDoc.data().role || 'editor';
-            // Mark as accepted
-            inviteDoc.ref.update({
-              status: 'accepted',
-              acceptedBy: currentUser.uid,
-              acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-          });
+    Object.keys(members).forEach(mid => {
+      if (members[mid].email === userEmail && members[mid].status === 'pending') {
+        role = members[mid].role || 'editor';
+        invited = true;
+      }
+    });
+
+    if (!invited) {
+      showAuthError('Вы не приглашены в этот проект. Попросите владельца добавить ваш email.');
+      return;
+    }
+
+    // Update user profile with new project
+    const userRef = db.collection('users').doc(currentUser.uid);
+    return userRef.get().then(userDoc => {
+      const userData = userDoc.exists ? userDoc.data() : {};
+      const projects = userData.projects || {};
+      projects[code] = { role: role, joinedAt: new Date().toISOString() };
+
+      return userRef.set({ projects: projects }, { merge: true });
+    }).then(() => {
+      // Update project members
+      const newMembers = { ...members };
+      Object.keys(newMembers).forEach(mid => {
+        if (newMembers[mid].email === userEmail) {
+          newMembers[mid].status = 'active';
+          newMembers[mid].joinedAt = new Date().toISOString();
         }
-
-        // Add user to project members
-        return db.collection('projectMembers').doc(code).collection('members').doc(currentUser.uid).set({
-          email: userEmail,
-          role: role,
-          addedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }).then(() => {
-          // Add project to user's projects
-          return db.collection('userProjects').doc(currentUser.uid).collection('projects').doc(code).set({
-            role: role,
-            addedAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
-        }).then(() => {
-          showAuthSuccess('Вы присоединились к проекту! Переходим...');
-          setTimeout(() => {
-            switchProject(code);
-            showAppScreen();
-          }, 1000);
-        });
       });
+
+      return db.collection('projects').doc(code).update({ members: newMembers });
+    }).then(() => {
+      showAuthSuccess('Вы присоединились к проекту! Переходим...');
+      setTimeout(() => {
+        switchProject(code);
+        showAppScreen();
+      }, 1000);
+    });
   }).catch(err => {
     showAuthError('Ошибка: ' + err.message);
   });
@@ -931,63 +929,59 @@ function loadMembersList() {
   const container = document.getElementById('admin-members-list');
   container.innerHTML = '<div class="empty">Загрузка...</div>';
 
-  // Get project doc to find owner
+  // Get project doc with members (flat structure)
   db.collection('projects').doc(currentProjectId).get().then(projDoc => {
-    const ownerId = projDoc.exists ? projDoc.data().ownerId : null;
+    if (!projDoc.exists) {
+      container.innerHTML = '<div class="empty">Проект не найден</div>';
+      return;
+    }
 
-    // Get members from projectMembers collection
-    db.collection('projectMembers').doc(currentProjectId).collection('members').get()
-      .then(snapshot => {
-        if (snapshot.empty && !ownerId) {
-          container.innerHTML = '<div class="empty">Пока нет других пользователей</div>';
-          return;
-        }
+    const projectData = projDoc.data();
+    const ownerId = projectData.ownerId;
+    const members = projectData.members || {};
 
-        let html = '';
+    let html = '';
 
-        // Add owner first
-        if (ownerId && currentUser && ownerId === currentUser.uid) {
-          html += `
-            <div class="member-row">
-              <div class="member-info">
-                <div class="member-email">${currentUser.email} (вы)</div>
-                <div class="member-role">Владелец</div>
-              </div>
-              <span class="badge badge-neutral">владелец</span>
-            </div>
-          `;
-        }
+    // Add owner first
+    if (ownerId && currentUser && ownerId === currentUser.uid) {
+      html += `
+        <div class="member-row">
+          <div class="member-info">
+            <div class="member-email">${currentUser.email} (вы)</div>
+            <div class="member-role">Владелец</div>
+          </div>
+          <span class="badge badge-neutral">владелец</span>
+        </div>
+      `;
+    }
 
-        // Add other members
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const isYou = doc.id === currentUser.uid;
-          const isOwner = doc.id === ownerId;
+    // Add other members
+    Object.keys(members).forEach(mid => {
+      const data = members[mid];
+      const isYou = mid === currentUser.uid;
+      const isOwner = mid === ownerId;
 
-          if (isOwner) return; // Skip owner, already shown above
+      if (isOwner) return; // Skip owner, already shown above
 
-          html += `
-            <div class="member-row">
-              <div class="member-info">
-                <div class="member-email">${data.email || 'Без email'}</div>
-                <div class="member-role">${data.role === 'owner' ? 'Владелец' : data.role === 'editor' ? 'Редактор' : 'Наблюдатель'}</div>
-              </div>
-              ${!isYou ? `<button class="btn btn-xs btn-danger" onclick="removeMember('${doc.id}', '${data.email || ''}')">Отозвать доступ</button>` : ''}
-            </div>
-          `;
-        });
+      html += `
+        <div class="member-row">
+          <div class="member-info">
+            <div class="member-email">${data.email || 'Без email'}</div>
+            <div class="member-role">${data.role === 'owner' ? 'Владелец' : data.role === 'editor' ? 'Редактор' : 'Наблюдатель'}</div>
+          </div>
+          ${!isYou ? `<button class="btn btn-xs btn-danger" onclick="removeMember('${mid}', '${data.email || ''}')">Отозвать доступ</button>` : ''}
+        </div>
+      `;
+    });
 
-        if (html === '') {
-          container.innerHTML = '<div class="empty">Пока нет других пользователей</div>';
-        } else {
-          container.innerHTML = html;
-        }
-      }).catch(err => {
-        console.error('Error loading members:', err);
-        container.innerHTML = '<div class="empty">Ошибка загрузки: ' + err.message + '</div>';
-      });
+    if (html === '') {
+      container.innerHTML = '<div class="empty">Пока нет других пользователей</div>';
+    } else {
+      container.innerHTML = html;
+    }
   }).catch(err => {
-    container.innerHTML = '<div class="empty">Ошибка загрузки проекта</div>';
+    console.error('Error loading members:', err);
+    container.innerHTML = '<div class="empty">Ошибка загрузки: ' + err.message + '</div>';
   });
 }
 
@@ -1010,14 +1004,19 @@ function addMember() {
     return;
   }
 
-  // Add invitation to the project
-  const inviteId = 'invite_' + Date.now();
-  db.collection('projects').doc(currentProjectId).collection('invitations').doc(inviteId).set({
-    email: email,
-    role: role,
-    status: 'pending',
-    createdBy: currentUser.uid,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  // Add member to project (flat structure)
+  const memberId = 'member_' + Date.now();
+  db.collection('projects').doc(currentProjectId).get().then(doc => {
+    const data = doc.exists ? doc.data() : {};
+    const members = data.members || {};
+    members[memberId] = {
+      email: email,
+      role: role,
+      status: 'pending',
+      addedAt: new Date().toISOString()
+    };
+
+    return db.collection('projects').doc(currentProjectId).update({ members: members });
   }).then(() => {
     msg.textContent = 'Приглашение создано! Отправьте пользователю код проекта: ' + currentProjectId;
     msg.className = 'msg msg-ok';
@@ -1035,30 +1034,25 @@ function removeMember(uid, email) {
   if (!confirm('Отозвать доступ у этого пользователя?')) return;
   if (!currentProjectId) return;
 
-  // Remove from projectMembers
-  db.collection('projectMembers').doc(currentProjectId).collection('members').doc(uid).delete()
-    .then(() => {
-      // Also remove from user's project list
-      return db.collection('userProjects').doc(uid).collection('projects').doc(currentProjectId).delete();
-    })
-    .then(() => {
-      // Also delete any pending invitations for this email
-      return db.collection('projects').doc(currentProjectId).collection('invitations')
-        .where('email', '==', email).get();
-    })
-    .then(snapshot => {
-      const batch = db.batch();
-      snapshot.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      return batch.commit();
-    })
-    .then(() => {
-      loadMembersList();
-      showToast('Доступ отозван');
-    }).catch(err => {
-      showToast('Ошибка: ' + err.message);
+  // Get current members and remove this one
+  db.collection('projects').doc(currentProjectId).get().then(doc => {
+    const data = doc.exists ? doc.data() : {};
+    const members = data.members || {};
+
+    // Find and remove member by email or uid
+    Object.keys(members).forEach(key => {
+      if (members[key].email === email || key === uid) {
+        delete members[key];
+      }
     });
+
+    return db.collection('projects').doc(currentProjectId).update({ members: members });
+  }).then(() => {
+    loadMembersList();
+    showToast('Доступ отозван');
+  }).catch(err => {
+    showToast('Ошибка: ' + err.message);
+  });
 }
 
 function copyProjectId() {
@@ -1101,683 +1095,40 @@ function showAppScreen() {
 }
 
 function checkInvitations() {
+  // Check if current user has any pending invitations
   if (!currentUser || !currentUser.email) return;
 
   const userEmail = currentUser.email.toLowerCase();
 
-  // Check all projects this user has access to for pending invitations
-  db.collection('userProjects').doc(currentUser.uid).collection('projects').get()
-    .then(snapshot => {
-      snapshot.forEach(doc => {
-        const projectId = doc.id;
-        // Check invitations in this project
-        db.collection('projects').doc(projectId).collection('invitations')
-          .where('email', '==', userEmail)
-          .where('status', '==', 'pending')
-          .get()
-          .then(inviteSnapshot => {
-            inviteSnapshot.forEach(inviteDoc => {
-              const invite = inviteDoc.data();
-              // Auto-accept: add to projectMembers
-              db.collection('projectMembers').doc(projectId).collection('members').doc(currentUser.uid).set({
-                email: userEmail,
-                role: invite.role || 'editor',
-                addedAt: firebase.firestore.FieldValue.serverTimestamp()
-              }).then(() => {
-                // Update invitation status
-                inviteDoc.ref.update({
-                  status: 'accepted',
-                  acceptedBy: currentUser.uid,
-                  acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-              });
-            });
+  // Get all projects and check for invitations (flat structure)
+  db.collection('projects').get().then(snapshot => {
+    snapshot.forEach(doc => {
+      const projectId = doc.id;
+      const data = doc.data();
+      const members = data.members || {};
+
+      // Check if user is invited in this project
+      Object.keys(members).forEach(key => {
+        const member = members[key];
+        if (member.email === userEmail && member.status === 'pending') {
+          // Auto-accept: update member status and add to user profile
+          member.status = 'active';
+          member.joinedAt = new Date().toISOString();
+
+          // Update project
+          db.collection('projects').doc(projectId).update({ members: members });
+
+          // Add to user profile
+          db.collection('users').doc(currentUser.uid).get().then(userDoc => {
+            const userData = userDoc.exists ? userDoc.data() : {};
+            const projects = userData.projects || {};
+            projects[projectId] = { role: member.role || 'editor', joinedAt: new Date().toISOString() };
+            return db.collection('users').doc(currentUser.uid).set({ projects: projects }, { merge: true });
           });
+        }
       });
-    }).catch(err => console.log('No invitations or error:', err));
-}
-
-// ==================== UTILITY ====================
-function genId() {
-  return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2,5);
-}
-
-function fmt(n) {
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(n));
-}
-function fmt2(n) {
-  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-}
-
-function getStock(cid) {
-  const init = parseFloat(appData.initialStock[cid]) || 0;
-  const rec = (appData.receipts || []).filter(r => r.componentId === cid).reduce((s, r) => s + (parseFloat(r.qty) || 0), 0);
-  const spent = (appData.batches || []).reduce((s, b) => s + (b.components[cid] || 0), 0);
-  return init + rec - spent;
-}
-
-function getPrice(cid) {
-  const recs = (appData.receipts || []).filter(r => r.componentId === cid);
-  if (recs.length === 0) return 0;
-  let total = 0, qty = 0;
-  recs.forEach(r => {
-    const q = parseFloat(r.qty) || 0;
-    const p = (parseFloat(r.price) || 0) + (parseFloat(r.delivery) || 0);
-    total += q * p;
-    qty += q;
-  });
-  return qty > 0 ? total / qty : 0;
-}
-
-function getComponentName(cid) {
-  const c = (appData.recipe || []).find(r => r.id === cid);
-  return c ? c.name : cid;
-}
-
-function getSupplierName(cid, sid) {
-  const sups = (appData.suppliers || {})[cid] || [];
-  const s = sups.find(x => x.id === sid);
-  return s ? (s.company || s.person || 'Без названия') : '—';
-}
-
-function showToast(text) {
-  const toast = document.getElementById('toast');
-  toast.textContent = text;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 3000);
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.remove('active');
-}
-
-document.querySelectorAll('.modal-overlay').forEach(el => {
-  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('active'); });
-});
-
-// ==================== RENDER ALL ====================
-function renderAll() {
-  renderRecipe();
-  renderStock();
-  calcMixer();
-  calcAnnual();
-  renderSuppliers();
-  populateReceiptComp();
-  updateReceiptSuppliers();
-  renderReceiptHistory();
-  renderBatchHistory();
-}
-
-// ==================== TABS ====================
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
-    if (tab.dataset.tab === 'stock') renderStock();
-    if (tab.dataset.tab === 'mixer') calcMixer();
-    if (tab.dataset.tab === 'annual') calcAnnual();
-    if (tab.dataset.tab === 'suppliers') renderSuppliers();
-    if (tab.dataset.tab === 'receipt') {
-      renderReceiptHistory();
-      populateReceiptComp();
-      updateReceiptSuppliers();
-    }
-  });
-});
-
-// ==================== РЕЦЕПТ ====================
-function renderRecipe() {
-  const container = document.getElementById('recipe-content');
-  const btn = document.getElementById('recipe-edit-btn');
-  const err = document.getElementById('recipe-error');
-  err.style.display = 'none';
-
-  if (recipeEditMode) {
-    btn.textContent = '💾 Сохранить';
-    let html = '<div class="table-wrap"><table><thead><tr><th>Компонент</th><th class="num">Масс. доля %</th><th class="num">Расход на 1000 кг</th></tr></thead><tbody>';
-    (appData.recipe || []).forEach((c, i) => {
-      html += `<tr>
-        <td>${c.name}</td>
-        <td class="num"><input type="number" class="num" id="recipe-pct-${i}" value="${c.pct}" min="0" max="100" step="0.1" style="width:90px;display:inline-block" oninput="updateRecipeRow(${i})"></td>
-        <td class="num" id="recipe-per1000-${i}">${c.per1000}</td>
-      </tr>`;
     });
-    html += '</tbody></table></div>';
-    container.innerHTML = html;
-  } else {
-    btn.textContent = '✏️ Редактировать';
-    let html = '<div class="table-wrap"><table><thead><tr><th>Компонент</th><th class="num">Масс. доля %</th><th class="num">Расход на 1000 кг, кг</th></tr></thead><tbody>';
-    (appData.recipe || []).forEach(c => {
-      html += `<tr><td>${c.name}</td><td class="num">${c.pct}%</td><td class="num">${c.per1000}</td></tr>`;
-    });
-    html += `<tr style="font-weight:600"><td>Итого</td><td class="num">${(appData.recipe || []).reduce((s,c)=>s+c.pct,0)}%</td><td class="num">1000</td></tr>`;
-    html += '</tbody></table></div>';
-    container.innerHTML = html;
-  }
+  }).catch(err => console.log('No invitations or error:', err));
 }
 
-function updateRecipeRow(i) {
-  const pct = parseFloat(document.getElementById('recipe-pct-'+i).value) || 0;
-  document.getElementById('recipe-per1000-'+i).textContent = Math.round(pct * 10);
-}
-
-function toggleRecipeEdit() {
-  if (recipeEditMode) {
-    let total = 0;
-    const newRecipe = (appData.recipe || []).map((c, i) => {
-      const pct = parseFloat(document.getElementById('recipe-pct-'+i).value) || 0;
-      total += pct;
-      return { ...c, pct: pct, per1000: Math.round(pct * 10) };
-    });
-    if (Math.abs(total - 100) > 0.01) {
-      const err = document.getElementById('recipe-error');
-      err.textContent = 'Ошибка: сумма долей должна быть ровно 100%. Сейчас: ' + total.toFixed(1) + '%';
-      err.style.display = 'block';
-      return;
-    }
-    appData.recipe = newRecipe;
-    saveProjectData();
-    document.getElementById('recipe-error').style.display = 'none';
-    recipeEditMode = false;
-    renderRecipe();
-    calcMixer();
-    calcAnnual();
-    showToast('Рецепт сохранён');
-  } else {
-    recipeEditMode = true;
-    renderRecipe();
-  }
-}
-
-// ==================== СКЛАД ====================
-function renderStock() {
-  const tbody = document.getElementById('stock-body');
-  tbody.innerHTML = (appData.recipe || []).map(c => {
-    const init = parseFloat(appData.initialStock[c.id]) || 0;
-    const rec = (appData.receipts || []).filter(r => r.componentId === c.id).reduce((s, r) => s + (parseFloat(r.qty) || 0), 0);
-    const spent = (appData.batches || []).reduce((s, b) => s + (b.components[c.id] || 0), 0);
-    const current = init + rec - spent;
-    return `
-      <tr>
-        <td>${c.name}</td>
-        <td class="num"><input type="number" class="num" value="${init}" min="0" step="100" style="width:100px" onchange="appData.initialStock['${c.id}']=parseFloat(this.value)||0;saveProjectData();renderStock();calcMixer();calcAnnual();" ${userRole==='viewer'?'disabled':''}></td>
-        <td class="num">${fmt(rec)}</td>
-        <td class="num">${fmt(spent)}</td>
-        <td class="num" style="font-weight:600;color:${current<0?'var(--danger)':'var(--text-primary)'}">${fmt(current)}</td>
-      </tr>
-    `;
-  }).join('');
-}
-
-// ==================== ПРИЁМКА ====================
-function populateReceiptComp() {
-  const sel = document.getElementById('receipt-comp');
-  sel.innerHTML = '<option value="">Выберите...</option>' + (appData.recipe || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-}
-
-function updateReceiptSuppliers() {
-  const cid = document.getElementById('receipt-comp').value;
-  const sel = document.getElementById('receipt-sup');
-  if (!cid) {
-    sel.innerHTML = '<option value="">Сначала выберите материал</option>';
-    return;
-  }
-  const sups = (appData.suppliers || {})[cid] || [];
-  if (sups.length === 0) {
-    sel.innerHTML = '<option value="">Нет поставщиков — добавьте в разделе Поставщики</option>';
-    return;
-  }
-  sel.innerHTML = sups.map(s => `<option value="${s.id}">${s.company || s.person || 'Без названия'}</option>`).join('');
-}
-
-function addReceipt() {
-  if (userRole === 'viewer') { showToast('У вас права только на просмотр'); return; }
-
-  const cid = document.getElementById('receipt-comp').value;
-  const qty = parseFloat(document.getElementById('receipt-qty').value) || 0;
-  const sid = document.getElementById('receipt-sup').value;
-  const price = parseFloat(document.getElementById('receipt-price').value) || 0;
-  const delivery = parseFloat(document.getElementById('receipt-delivery').value) || 0;
-  const date = document.getElementById('receipt-date').value;
-  const msg = document.getElementById('receipt-msg');
-
-  if (!cid) { msg.textContent = 'Выберите материал'; msg.className = 'msg msg-err'; msg.style.display = 'block'; return; }
-  if (qty <= 0) { msg.textContent = 'Введите количество'; msg.className = 'msg msg-err'; msg.style.display = 'block'; return; }
-  if (!sid) { msg.textContent = 'Выберите поставщика'; msg.className = 'msg msg-err'; msg.style.display = 'block'; return; }
-
-  if (!appData.receipts) appData.receipts = [];
-  appData.receipts.push({ id: genId(), componentId: cid, qty: qty, supplierId: sid, price: price, delivery: delivery, date: date });
-  saveProjectData();
-  msg.textContent = `Приёмка добавлена: ${getComponentName(cid)} +${fmt(qty)} кг`;
-  msg.className = 'msg msg-ok';
-  msg.style.display = 'block';
-
-  document.getElementById('receipt-qty').value = '';
-  document.getElementById('receipt-price').value = '';
-  document.getElementById('receipt-delivery').value = '';
-  renderReceiptHistory();
-  renderStock();
-  calcMixer();
-  calcAnnual();
-  showToast('Приёмка добавлена');
-}
-
-function renderReceiptHistory() {
-  const tbody = document.getElementById('receipt-history');
-  const empty = document.getElementById('receipt-empty');
-  if (!appData.receipts || appData.receipts.length === 0) {
-    tbody.innerHTML = '';
-    empty.style.display = 'block';
-    return;
-  }
-  empty.style.display = 'none';
-  const sorted = [...appData.receipts].sort((a,b) => (b.date||'').localeCompare(a.date||''));
-  tbody.innerHTML = sorted.map(r => {
-    const totalPrice = (parseFloat(r.price)||0) + (parseFloat(r.delivery)||0);
-    return `
-      <tr class="hist-item">
-        <td>${r.date || '—'}</td>
-        <td>${getComponentName(r.componentId)}</td>
-        <td class="num">${fmt(r.qty)}</td>
-        <td class="num">${fmt2(r.price||0)}</td>
-        <td class="num">${fmt2(r.delivery||0)}</td>
-        <td class="num" style="font-weight:600">${fmt2(totalPrice)}</td>
-        <td>${getSupplierName(r.componentId, r.supplierId)}</td>
-        <td class="num">
-          <button class="btn btn-xs btn-danger actions" onclick="deleteReceipt('${r.id}')" ${userRole==='viewer'?'disabled':''}>×</button>
-        </td>
-      </tr>
-    `;
-  }).join('');
-}
-
-function deleteReceipt(id) {
-  if (userRole === 'viewer') return;
-  appData.receipts = (appData.receipts || []).filter(r => r.id !== id);
-  saveProjectData();
-  renderReceiptHistory();
-  renderStock();
-  calcMixer();
-  calcAnnual();
-  showToast('Приёмка удалена');
-}
-
-// ==================== ПОСТАВЩИКИ ====================
-function renderSuppliers() {
-  const container = document.getElementById('suppliers-body');
-  container.innerHTML = (appData.recipe || []).map(c => {
-    const sups = (appData.suppliers || {})[c.id] || [];
-    let html = `<div class="sup-card">`;
-    html += `<div class="sup-card-header">`;
-    html += `<div class="sup-card-title">${c.name}</div>`;
-    html += `<button class="btn btn-sm" onclick="addSupplier('${c.id}')" ${userRole==='viewer'?'disabled':''}>+ Добавить поставщика</button>`;
-    html += `</div>`;
-
-    if (sups.length === 0) {
-      html += `<div class="empty" style="padding:15px">Поставщиков пока нет</div>`;
-    } else {
-      html += `<div style="font-size:12px;color:var(--text-tertiary);margin-bottom:10px">${sups.length} поставщик(ов)</div>`;
-      sups.forEach((s, idx) => {
-        html += `<div class="sup-grid" style="margin-bottom:8px">`;
-        html += `<input placeholder="Компания" value="${s.company}" onchange="updateSupplier('${c.id}','${s.id}','company',this.value)" style="font-size:13px" ${userRole==='viewer'?'disabled':''}>`;
-        html += `<input placeholder="Телефон" value="${s.phone}" onchange="updateSupplier('${c.id}','${s.id}','phone',this.value)" style="font-size:13px" ${userRole==='viewer'?'disabled':''}>`;
-        html += `<input placeholder="Email" value="${s.email}" onchange="updateSupplier('${c.id}','${s.id}','email',this.value)" style="font-size:13px" ${userRole==='viewer'?'disabled':''}>`;
-        html += `<input placeholder="ФИО" value="${s.person}" onchange="updateSupplier('${c.id}','${s.id}','person',this.value)" style="font-size:13px" ${userRole==='viewer'?'disabled':''}>`;
-        html += `<button class="btn btn-xs btn-danger" style="grid-column:span 1" onclick="deleteSupplier('${c.id}','${s.id}')" ${userRole==='viewer'?'disabled':''}>Удалить</button>`;
-        html += `</div>`;
-      });
-    }
-    html += `</div>`;
-    return html;
-  }).join('');
-}
-
-function addSupplier(cid) {
-  if (userRole === 'viewer') return;
-  if (!appData.suppliers) appData.suppliers = {};
-  if (!appData.suppliers[cid]) appData.suppliers[cid] = [];
-  appData.suppliers[cid].push({ id: genId(), company:'', phone:'', email:'', person:'' });
-  saveProjectData();
-  renderSuppliers();
-  updateReceiptSuppliers();
-}
-
-function updateSupplier(cid, sid, field, val) {
-  if (userRole === 'viewer') return;
-  const s = ((appData.suppliers || {})[cid] || []).find(x => x.id === sid);
-  if (s) s[field] = val;
-  saveProjectData();
-  calcMixer();
-  calcAnnual();
-}
-
-function deleteSupplier(cid, sid) {
-  if (userRole === 'viewer') return;
-  if (!appData.suppliers) appData.suppliers = {};
-  appData.suppliers[cid] = (appData.suppliers[cid] || []).filter(s => s.id !== sid);
-  saveProjectData();
-  renderSuppliers();
-  updateReceiptSuppliers();
-  calcMixer();
-  calcAnnual();
-  showToast('Поставщик удалён');
-}
-
-// ==================== ЗАМЕС ====================
-function calcMixer() {
-  const target = parseFloat(document.getElementById('mixer-target').value) || 0;
-  const tolling = parseFloat(document.getElementById('mixer-tolling').value) || 0;
-
-  const tbody = document.getElementById('mixer-body');
-  const recommend = document.getElementById('mixer-recommend');
-  const costDiv = document.getElementById('mixer-cost');
-
-  let totalMaterialCost = 0;
-  let rows = [];
-  let shortfalls = [];
-
-  (appData.recipe || []).forEach(c => {
-    const need = target * c.per1000 / 1000;
-    const stock = getStock(c.id);
-    const missing = Math.max(0, need - stock);
-    const price = getPrice(c.id);
-    const cost = need * price;
-    totalMaterialCost += cost;
-
-    let status = '<span class="badge badge-ok">✓ Хватает</span>';
-    let fillClass = 'fill-ok';
-    let pct = stock > 0 ? Math.min(100, (stock/need)*100) : 0;
-    if (missing > 0) {
-      if (stock > 0) {
-        status = '<span class="badge badge-warn">⚠ Частично</span>';
-        fillClass = 'fill-warn';
-      } else {
-        status = '<span class="badge badge-err">✗ Нет</span>';
-        fillClass = 'fill-err';
-      }
-      shortfalls.push({ name: c.name, missing: missing, price: price });
-    }
-
-    rows.push(`
-      <tr>
-        <td>${c.name}</td>
-        <td class="num">${fmt(need)}</td>
-        <td class="num">${fmt(stock)}</td>
-        <td class="num" style="color:${missing>0?'var(--danger)':'var(--positive)'};font-weight:${missing>0?600:400}">${fmt(missing)}</td>
-        <td>${status}<div class="progress-bar"><div class="progress-fill ${fillClass}" style="width:${pct}%"></div></div></td>
-      </tr>
-    `);
-  });
-
-  tbody.innerHTML = rows.join('');
-
-  if (shortfalls.length === 0) {
-    recommend.innerHTML = '<div class="badge badge-ok">Все компоненты в достаточном количестве. Можно начинать замес.</div>';
-  } else {
-    let recHtml = '<div class="table-wrap"><table><thead><tr><th>Компонент</th><th class="num">Докупить, кг</th><th class="num">Цена с доставкой, р/кг</th><th class="num">Сумма, руб</th></tr></thead><tbody>';
-    let recTotal = 0;
-    shortfalls.forEach(s => {
-      const sum = s.missing * s.price;
-      recTotal += sum;
-      recHtml += `<tr><td>${s.name}</td><td class="num">${fmt(s.missing)}</td><td class="num">${fmt2(s.price)}</td><td class="num">${fmt2(sum)}</td></tr>`;
-    });
-    recHtml += `<tr style="font-weight:600"><td colspan="3">Итого к закупке</td><td class="num">${fmt2(recTotal)}</td></tr></tbody></table></div>`;
-    recommend.innerHTML = recHtml;
-  }
-
-  const tollingCost = target * tolling;
-  const totalCost = totalMaterialCost + tollingCost;
-  const costPerKg = target > 0 ? totalCost / target : 0;
-
-  costDiv.innerHTML = `
-    <div class="summary-box ${totalCost <= 0 ? 'summary-box-neg' : ''}">
-      <div class="summary-row"><span class="label">Сырье и материалы</span><span class="value">${fmt2(totalMaterialCost)} руб</span></div>
-      <div class="summary-row"><span class="label">Толлинг Цемторг (${fmt(target)} кг × ${fmt2(tolling)} р)</span><span class="value">${fmt2(tollingCost)} руб</span></div>
-      <div class="summary-row sum"><span class="label">Общая себестоимость</span><span class="value">${fmt2(totalCost)} руб</span></div>
-      <div class="summary-row" style="margin-top:4px"><span class="label">Себестоимость 1 кг ПМД</span><span class="value" style="font-weight:600">${fmt2(costPerKg)} руб</span></div>
-    </div>
-  `;
-
-  renderBatchHistory();
-}
-
-function doBatch() {
-  if (userRole === 'viewer') { showToast('У вас права только на просмотр'); return; }
-
-  const target = parseFloat(document.getElementById('mixer-target').value) || 0;
-  const date = document.getElementById('mixer-date').value;
-  const tolling = parseFloat(document.getElementById('mixer-tolling').value) || 0;
-  const msg = document.getElementById('mixer-msg');
-
-  if (target <= 0) {
-    msg.innerHTML = '<span class="badge badge-err">Введите количество ПМД</span>';
-    msg.className = 'msg msg-err';
-    msg.style.display = 'block';
-    return;
-  }
-
-  let enough = true;
-  let short = [];
-  (appData.recipe || []).forEach(c => {
-    const need = target * c.per1000 / 1000;
-    const stock = getStock(c.id);
-    if (stock < need) {
-      enough = false;
-      short.push(`${c.name}: не хватает ${fmt(need - stock)} кг`);
-    }
-  });
-
-  if (!enough) {
-    msg.innerHTML = '<span class="badge badge-err">Недостаточно материалов:</span><br><span style="font-size:13px;color:var(--text-tertiary)">' + short.join('<br>') + '</span>';
-    msg.className = 'msg msg-err';
-    msg.style.display = 'block';
-    return;
-  }
-
-  const components = {};
-  (appData.recipe || []).forEach(c => {
-    components[c.id] = target * c.per1000 / 1000;
-  });
-
-  let totalMaterialCost = 0;
-  (appData.recipe || []).forEach(c => {
-    totalMaterialCost += components[c.id] * getPrice(c.id);
-  });
-  const tollingCost = target * tolling;
-  const totalCost = totalMaterialCost + tollingCost;
-
-  if (!appData.batches) appData.batches = [];
-  appData.batches.push({
-    id: genId(),
-    num: appData.batchCounter || 1,
-    date: date,
-    target: target,
-    components: components,
-    tolling: tolling,
-    totalCost: totalCost
-  });
-  appData.batchCounter = (appData.batchCounter || 1) + 1;
-
-  saveProjectData();
-  msg.innerHTML = '<span class="badge badge-ok">Замес №' + (appData.batchCounter - 1) + ' зафиксирован на ' + (date || '—') + '</span>';
-  msg.className = 'msg msg-ok';
-  msg.style.display = 'block';
-  renderStock();
-  calcMixer();
-  calcAnnual();
-  showToast('Замес зафиксирован');
-}
-
-function renderBatchHistory() {
-  const tbody = document.getElementById('batch-history');
-  const empty = document.getElementById('batch-empty');
-  if (!appData.batches || appData.batches.length === 0) {
-    tbody.innerHTML = '';
-    empty.style.display = 'block';
-    return;
-  }
-  empty.style.display = 'none';
-  const sorted = [...appData.batches].sort((a,b) => (b.date||'').localeCompare(a.date||''));
-  tbody.innerHTML = sorted.map(b => `
-    <tr class="hist-item">
-      <td style="font-weight:600">${b.num}</td>
-      <td>${b.date || '—'}</td>
-      <td class="num">${fmt(b.target)}</td>
-      <td class="num" style="font-weight:600">${fmt2(b.totalCost)}</td>
-      <td class="num">
-        <button class="btn btn-xs btn-danger actions" onclick="deleteBatch('${b.id}')" ${userRole==='viewer'?'disabled':''}>×</button>
-      </td>
-    </tr>
-  `).join('');
-}
-
-function deleteBatch(id) {
-  if (userRole === 'viewer') return;
-  appData.batches = (appData.batches || []).filter(b => b.id !== id);
-  saveProjectData();
-  renderStock();
-  calcMixer();
-  calcAnnual();
-  showToast('Замес удалён');
-}
-
-// ==================== ГОДОВОЙ ПЛАН ====================
-function calcAnnual() {
-  const target = parseFloat(document.getElementById('annual-target').value) || 0;
-  const tolling = parseFloat(document.getElementById('annual-tolling').value) || 0;
-
-  const tbody = document.getElementById('annual-body');
-  const recommend = document.getElementById('annual-recommend');
-  const costDiv = document.getElementById('annual-cost');
-
-  let totalMaterialCost = 0;
-  let rows = [];
-  let shortfalls = [];
-
-  (appData.recipe || []).forEach(c => {
-    const need = target * c.per1000 / 1000;
-    const stock = getStock(c.id);
-    const toBuy = Math.max(0, need - stock);
-    const price = getPrice(c.id);
-    const cost = need * price;
-    totalMaterialCost += cost;
-
-    let status = '<span class="badge badge-ok">✓ OK</span>';
-    let fillClass = 'fill-ok';
-    let pct = need > 0 ? Math.min(100, (stock/need)*100) : 0;
-    if (toBuy > 0) {
-      status = '<span class="badge badge-err">✗ Закупить</span>';
-      fillClass = 'fill-err';
-      shortfalls.push({ name: c.name, toBuy: toBuy, price: price, totalCost: toBuy * price });
-    }
-
-    rows.push(`
-      <tr>
-        <td>${c.name}</td>
-        <td class="num">${fmt(need)}</td>
-        <td class="num">${fmt(stock)}</td>
-        <td class="num" style="color:${toBuy>0?'var(--danger)':'var(--text-tertiary)'};font-weight:${toBuy>0?600:400}">${fmt(toBuy)}</td>
-        <td>${status}<div class="progress-bar"><div class="progress-fill ${fillClass}" style="width:${pct}%"></div></div></td>
-      </tr>
-    `);
-  });
-
-  tbody.innerHTML = rows.join('');
-
-  if (shortfalls.length === 0) {
-    recommend.innerHTML = '<div class="badge badge-ok">Текущих запасов достаточно для выполнения годового плана!</div>';
-  } else {
-    let recHtml = '<div class="table-wrap"><table><thead><tr><th>Компонент</th><th class="num">Докупить, кг</th><th class="num">Цена с доставкой, р/кг</th><th class="num">Сумма, руб</th></tr></thead><tbody>';
-    let recTotal = 0;
-    shortfalls.forEach(s => {
-      recTotal += s.totalCost;
-      recHtml += `<tr><td>${s.name}</td><td class="num">${fmt(s.toBuy)}</td><td class="num">${fmt2(s.price)}</td><td class="num">${fmt2(s.totalCost)}</td></tr>`;
-    });
-    recHtml += `<tr style="font-weight:600"><td colspan="3">Итого к закупке</td><td class="num">${fmt2(recTotal)}</td></tr></tbody></table></div>`;
-    recommend.innerHTML = recHtml;
-  }
-
-  const tollingCost = target * tolling;
-  const totalCost = totalMaterialCost + tollingCost;
-  const costPerKg = target > 0 ? totalCost / target : 0;
-
-  costDiv.innerHTML = `
-    <div class="summary-box">
-      <div class="summary-row"><span class="label">Годовая цель производства</span><span class="value">${fmt(target)} кг</span></div>
-      <div class="divider" style="margin:8px 0"></div>
-      <div class="summary-row"><span class="label">Сырье и материалы</span><span class="value">${fmt2(totalMaterialCost)} руб</span></div>
-      <div class="summary-row"><span class="label">Толлинг Цемторг (${fmt(target)} кг × ${fmt2(tolling)} р)</span><span class="value">${fmt2(tollingCost)} руб</span></div>
-      <div class="summary-row sum"><span class="label">Общая годовая себестоимость</span><span class="value">${fmt2(totalCost)} руб</span></div>
-      <div class="summary-row" style="margin-top:4px"><span class="label">Себестоимость 1 кг ПМД</span><span class="value" style="font-weight:600">${fmt2(costPerKg)} руб</span></div>
-    </div>
-  `;
-}
-
-// ==================== БЭКАП ====================
-function showBackupModal() {
-  document.getElementById('modal-backup').classList.add('active');
-}
-
-function exportBackup() {
-  const blob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `pmd_backup_${new Date().toISOString().split('T')[0]}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Бэкап скачан');
-}
-
-function importBackup(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const parsed = JSON.parse(e.target.result);
-      if (confirm('Текущие данные проекта будут заменены бэкапом. Продолжить?')) {
-        appData = { ...appData, ...parsed };
-        if (!appData.recipe) appData.recipe = getDefaultRecipe();
-        saveProjectData();
-        renderAll();
-        showToast('Бэкап восстановлен');
-      }
-    } catch(err) {
-      alert('Ошибка чтения файла: ' + err.message);
-    }
-  };
-  reader.readAsText(file);
-  input.value = '';
-}
-
-// ==================== OFFLINE DETECTION ====================
-window.addEventListener('online', () => {
-  document.getElementById('offline-bar').classList.remove('show');
-  showToast('Подключение восстановлено');
-});
-window.addEventListener('offline', () => {
-  document.getElementById('offline-bar').classList.add('show');
-});
-
-// ==================== INIT ====================
-window.addEventListener('DOMContentLoaded', () => {
-  // Set today's date
-  const today = new Date().toISOString().split('T')[0];
-  document.getElementById('receipt-date').value = today;
-  document.getElementById('mixer-date').value = today;
-
-  // Check if Firebase is properly configured
-  if (firebaseConfig.apiKey === 'ВАШ_API_KEY') {
-    document.getElementById('loading-text').textContent = 'Firebase не настроен. См. инструкцию в README.';
-    setTimeout(() => {
-      document.getElementById('loading-screen').classList.add('hidden');
-      showAuthScreen();
-    }, 2000);
-  }
-});
-</script>
-</body>
-</html>
+>
