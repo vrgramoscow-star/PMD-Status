@@ -1,0 +1,1783 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ПМД-Статус — Калькулятор сухих смесей</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --surface: #ffffff; --surface-hover: #f0f0f2; --surface-elevated: #fafafa;
+    --border: #e0e0e5; --border-subtle: #f0f0f2; --border-strong: #c7c7cc;
+    --text-primary: #1a1a1a; --text-secondary: #6e6e73; --text-tertiary: #8e8e93; --text-quaternary: #c7c7cc;
+    --accent: #0071e3; --accent-hover: #005bb5; --accent-light: rgba(0,113,227,0.08);
+    --positive: #34c759; --positive-light: rgba(52,199,89,0.08);
+    --warning: #ff9500; --warning-light: rgba(255,149,0,0.08);
+    --danger: #ff3b30; --danger-light: rgba(255,59,48,0.08);
+    --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px; --radius-xl: 20px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.05);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text-primary); line-height: 1.5; min-height: 100vh; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+  /* Auth Screen */
+  .auth-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .auth-card { background: var(--surface); border-radius: var(--radius-xl); padding: 40px; width: 100%; max-width: 420px; box-shadow: var(--shadow-lg); }
+  .auth-logo { font-size: 28px; font-weight: 700; text-align: center; margin-bottom: 8px; letter-spacing: -0.5px; }
+  .auth-logo span { color: var(--accent); }
+  .auth-subtitle { text-align: center; color: var(--text-secondary); font-size: 14px; margin-bottom: 32px; }
+  .auth-form { display: flex; flex-direction: column; gap: 16px; }
+  .auth-input { padding: 12px 16px; border: 1.5px solid var(--border); border-radius: var(--radius-md); font-size: 15px; background: var(--bg); transition: all 0.2s; }
+  .auth-input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-light); outline: none; }
+  .auth-btn { padding: 14px; border-radius: var(--radius-md); border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .auth-btn-primary { background: var(--accent); color: #fff; }
+  .auth-btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+  .auth-btn-secondary { background: transparent; color: var(--accent); border: 1.5px solid var(--border); }
+  .auth-btn-secondary:hover { background: var(--surface-hover); }
+  .auth-divider { display: flex; align-items: center; gap: 12px; margin: 8px 0; color: var(--text-tertiary); font-size: 13px; }
+  .auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .auth-toggle { text-align: center; font-size: 14px; color: var(--text-secondary); }
+  .auth-toggle a { color: var(--accent); cursor: pointer; font-weight: 500; }
+  .auth-toggle a:hover { text-decoration: underline; }
+  .auth-error { background: var(--danger-light); color: var(--danger); padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; display: none; }
+  .auth-success { background: var(--positive-light); color: #1a7a3a; padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; display: none; }
+  .auth-hint { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
+
+  /* App Header */
+  .app-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .app-logo { font-size: 22px; font-weight: 700; }
+  .app-logo span { color: var(--accent); }
+  .app-user { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); }
+  .app-user-email { font-weight: 500; color: var(--text-primary); }
+  .project-selector { padding: 6px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface); font-size: 13px; cursor: pointer; min-width: 180px; }
+  .header-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 20px; background: var(--surface); padding: 6px; border-radius: var(--radius-lg); box-shadow: var(--shadow); position: sticky; top: 10px; z-index: 100; }
+  .tab { padding: 10px 18px; border-radius: var(--radius-md); border: none; background: transparent; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-secondary); transition: all 0.2s; font-family: inherit; }
+  .tab:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .tab.active { background: var(--text-primary); color: var(--surface); }
+
+  /* Panels */
+  .panel { display: none; animation: fadeIn 0.3s ease; }
+  .panel.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Cards */
+  .card { background: var(--surface); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 16px; box-shadow: var(--shadow); }
+  .card-title { font-size: 17px; font-weight: 600; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .card-subtitle { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; padding: 10px 12px; font-weight: 600; color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1.5px solid var(--border); white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
+  tr:hover td { background: var(--surface-hover); }
+  tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Inputs */
+  input, select, textarea {
+    font-family: inherit; font-size: 14px; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    background: var(--bg); color: var(--text-primary); outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+  input::placeholder { color: var(--text-quaternary); }
+  input.num { text-align: right; font-variant-numeric: tabular-nums; }
+  select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236e6e73' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; cursor: pointer; }
+
+  /* Buttons */
+  .btn {
+    font-family: inherit; font-size: 14px; font-weight: 500; padding: 9px 18px;
+    border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-primary); cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { background: var(--surface-hover); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .btn:active { transform: translateY(0); }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-danger { background: var(--danger-light); color: var(--danger); border-color: rgba(255,59,48,0.2); }
+  .btn-danger:hover { background: rgba(255,59,48,0.15); }
+  .btn-success { background: var(--positive-light); color: #1a7a3a; border-color: rgba(52,199,89,0.2); }
+  .btn-success:hover { background: rgba(52,199,89,0.15); }
+  .btn-sm { padding: 5px 12px; font-size: 13px; }
+  .btn-xs { padding: 3px 8px; font-size: 12px; }
+  .btn-ghost { background: transparent; border-color: transparent; }
+  .btn-ghost:hover { background: var(--surface-hover); }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+  @media (max-width: 900px) { .grid-4 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+  /* Form */
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .form-group.inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .form-group.inline label { margin-bottom: 0; min-width: 140px; text-transform: none; font-size: 14px; font-weight: 400; }
+  .form-group.inline input, .form-group.inline select { flex: 1; min-width: 150px; }
+
+  /* Badges */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; }
+  .badge-ok { background: var(--positive-light); color: #1a7a3a; }
+  .badge-warn { background: var(--warning-light); color: #b36b00; }
+  .badge-err { background: var(--danger-light); color: #c41e14; }
+  .badge-info { background: var(--accent-light); color: #005bb5; }
+  .badge-neutral { background: var(--surface-hover); color: var(--text-secondary); }
+
+  /* Progress */
+  .progress-bar { height: 5px; border-radius: 3px; background: var(--border-subtle); overflow: hidden; margin-top: 5px; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .fill-ok { background: var(--positive); }
+  .fill-warn { background: var(--warning); }
+  .fill-err { background: var(--danger); }
+
+  /* Summary */
+  .summary-box { background: var(--positive-light); border: 1px solid rgba(52,199,89,0.15); border-radius: var(--radius-md); padding: 16px; margin-top: 12px; }
+  .summary-box-neg { background: var(--danger-light); border-color: rgba(255,59,48,0.15); }
+  .summary-row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: 14px; }
+  .summary-row.sum { font-weight: 600; font-size: 16px; border-top: 1px solid var(--border-subtle); margin-top: 6px; padding-top: 10px; }
+  .summary-row .label { color: var(--text-secondary); }
+  .summary-row .value { font-variant-numeric: tabular-nums; }
+
+  /* History */
+  .hist-item { position: relative; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .hist-item:last-child { border-bottom: none; }
+  .hist-item .actions { opacity: 0; transition: opacity 0.2s; }
+  .hist-item:hover .actions { opacity: 1; }
+  .hist-meta { font-size: 12px; color: var(--text-tertiary); }
+  .hist-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Supplier card */
+  .sup-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; margin-bottom: 12px; }
+  .sup-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .sup-card-title { font-weight: 600; font-size: 15px; }
+  .sup-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+  @media (max-width: 900px) { .sup-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 500px) { .sup-grid { grid-template-columns: 1fr; } }
+
+  /* Messages */
+  .msg { padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; margin-top: 10px; display: none; }
+  .msg-err { background: var(--danger-light); color: var(--danger); border: 1px solid rgba(255,59,48,0.15); }
+  .msg-ok { background: var(--positive-light); color: #1a7a3a; border: 1px solid rgba(52,199,89,0.15); }
+  .msg-info { background: var(--accent-light); color: #005bb5; border: 1px solid rgba(0,113,227,0.15); }
+  .msg-warn { background: var(--warning-light); color: #b36b00; border: 1px solid rgba(255,149,0,0.15); }
+
+  /* Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; backdrop-filter: blur(4px); }
+  .modal-overlay.active { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius-xl); padding: 28px; max-width: 560px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+  .modal-title { font-size: 20px; font-weight: 700; margin-bottom: 20px; letter-spacing: -0.3px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+  .modal-section { margin-bottom: 20px; }
+  .modal-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .modal-hint { font-size: 13px; color: var(--text-tertiary); margin-top: 6px; line-height: 1.5; }
+  .code-box { background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 12px 16px; font-family: monospace; font-size: 13px; word-break: break-all; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--text-primary); color: var(--surface); padding: 12px 20px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; box-shadow: 0 8px 24px rgba(0,0,0,0.15); transform: translateY(100px); opacity: 0; transition: all 0.3s ease; z-index: 2000; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* Divider */
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+  .section { margin-bottom: 20px; }
+  .h3 { font-size: 16px; font-weight: 600; margin: 0 0 10px 0; }
+  .h4 { font-size: 14px; font-weight: 600; margin: 0 0 8px 0; }
+
+  /* Empty */
+  .empty { text-align: center; padding: 30px; color: var(--text-tertiary); font-size: 14px; }
+
+  /* Loading */
+  .loading-overlay { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 3000; transition: opacity 0.3s; }
+  .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { margin-top: 16px; color: var(--text-secondary); font-size: 14px; }
+
+  /* Member list */
+  .member-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+  .member-row:last-child { border-bottom: none; }
+  .member-info { display: flex; flex-direction: column; gap: 2px; }
+  .member-email { font-weight: 500; font-size: 14px; }
+  .member-role { font-size: 12px; color: var(--text-tertiary); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--text-quaternary); border-radius: 3px; }
+
+  /* Print */
+  @media print { body { background: #fff; padding: 0; } .tabs, .header-actions, .btn, .actions, .auth-screen { display: none !important; } .card { box-shadow: none; border: 1px solid #ddd; } }
+
+  /* Offline indicator */
+  .offline-bar { position: fixed; top: 0; left: 0; right: 0; background: var(--warning); color: #fff; text-align: center; padding: 6px; font-size: 13px; font-weight: 500; z-index: 5000; display: none; }
+  .offline-bar.show { display: block; }
+</style>
+</head>
+<body>
+<div class="offline-bar" id="offline-bar">⚠️ Нет подключения к интернету. Данные сохранятся локально и синхронизируются при восстановлении связи.</div>
+
+<!-- Loading Screen -->
+<div class="loading-overlay" id="loading-screen">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Загрузка...</div>
+</div>
+
+<!-- Auth Screen -->
+<div class="auth-screen" id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">ПМД-<span>Статус</span></div>
+    <div class="auth-subtitle" id="auth-subtitle">Вход в систему</div>
+
+    <div class="auth-error" id="auth-error"></div>
+    <div class="auth-success" id="auth-success"></div>
+
+    <div class="auth-form" id="auth-form-login">
+      <input type="email" class="auth-input" id="login-email" placeholder="Email" autocomplete="email">
+      <input type="password" class="auth-input" id="login-password" placeholder="Пароль" autocomplete="current-password">
+      <button class="auth-btn auth-btn-primary" onclick="login()">Войти</button>
+      <div class="auth-divider">или</div>
+      <button class="auth-btn auth-btn-secondary" onclick="showRegister()">Создать аккаунт</button>
+    </div>
+
+    <div class="auth-form" id="auth-form-register" style="display:none">
+      <input type="email" class="auth-input" id="reg-email" placeholder="Email" autocomplete="email">
+      <input type="password" class="auth-input" id="reg-password" placeholder="Пароль (минимум 6 символов)" autocomplete="new-password">
+      <div class="auth-hint">Пароль должен содержать минимум 6 символов</div>
+      <input type="password" class="auth-input" id="reg-password2" placeholder="Повторите пароль" autocomplete="new-password">
+      <button class="auth-btn auth-btn-primary" onclick="register()">Зарегистрироваться</button>
+      <div class="auth-divider">или</div>
+      <button class="auth-btn auth-btn-secondary" onclick="showLogin()">Уже есть аккаунт</button>
+      <div style="text-align:center;margin-top:12px">
+        <a onclick="showJoin()" style="color:var(--accent);cursor:pointer;font-size:14px;font-weight:500">Присоединиться к существующему проекту →</a>
+      </div>
+    </div>
+
+    <div class="auth-form" id="auth-form-join" style="display:none">
+      <div class="modal-hint" style="margin-bottom:12px">Введите код проекта, который вам дал владелец, чтобы получить доступ к его данным.</div>
+      <input type="text" class="auth-input" id="join-code" placeholder="Код проекта (например: AbC123XyZ)" style="text-transform:uppercase">
+      <button class="auth-btn auth-btn-primary" onclick="joinProject()">Присоединиться</button>
+      <div class="auth-divider">или</div>
+      <button class="auth-btn auth-btn-secondary" onclick="showLogin()">Назад ко входу</button>
+    </div>
+  </div>
+</div>
+
+<!-- App Screen -->
+<div class="container" id="app-screen" style="display:none">
+  <div class="app-header">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div class="app-logo">ПМД-<span>Статус</span></div>
+      <select class="project-selector" id="project-selector" onchange="switchProject(this.value)">
+        <option value="">Загрузка...</option>
+      </select>
+    </div>
+    <div class="header-actions">
+      <div class="app-user">
+        <span class="app-user-email" id="user-email"></span>
+        <span class="badge badge-neutral" id="user-role-badge">владелец</span>
+      </div>
+      <button class="btn btn-sm btn-ghost" onclick="showAdminModal()" id="btn-admin" title="Управление доступом">👥 Админ</button>
+      <button class="btn btn-sm" onclick="showBackupModal()">💾 Бэкап</button>
+      <button class="btn btn-sm btn-primary" onclick="logout()">Выйти</button>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="recipe">1. Рецепт</button>
+    <button class="tab" data-tab="receipt">2. Приёмка</button>
+    <button class="tab" data-tab="stock">3. Склад</button>
+    <button class="tab" data-tab="suppliers">4. Поставщики</button>
+    <button class="tab" data-tab="mixer">5. Замес</button>
+    <button class="tab" data-tab="annual">6. Годовой план</button>
+  </div>
+
+  <!-- === РЕЦЕПТ === -->
+  <div class="panel active" id="panel-recipe">
+    <div class="card">
+      <div class="card-title">
+        <span>Рецепт ПМД-Статус</span>
+        <button class="btn btn-sm" id="recipe-edit-btn" onclick="toggleRecipeEdit()">✏️ Редактировать</button>
+      </div>
+      <div id="recipe-content"></div>
+      <div class="msg msg-err" id="recipe-error"></div>
+    </div>
+  </div>
+
+  <!-- === ПРИЁМКА === -->
+  <div class="panel" id="panel-receipt">
+    <div class="card">
+      <div class="card-title">Новая приёмка материала</div>
+      <div class="grid-3">
+        <div class="form-group">
+          <label>Материал</label>
+          <select id="receipt-comp" onchange="updateReceiptSuppliers()"></select>
+        </div>
+        <div class="form-group">
+          <label>Количество, кг</label>
+          <input type="number" class="num" id="receipt-qty" min="0" step="100" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Поставщик</label>
+          <select id="receipt-sup"><option value="">Сначала выберите материал</option></select>
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="form-group">
+          <label>Цена материала, р/кг</label>
+          <input type="number" class="num" id="receipt-price" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Доставка, р/кг</label>
+          <input type="number" class="num" id="receipt-delivery" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group">
+          <label>Дата приёмки</label>
+          <input type="date" id="receipt-date">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="addReceipt()">➕ Добавить приёмку</button>
+      <div class="msg" id="receipt-msg"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">История приёмок</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Дата</th><th>Материал</th><th class="num">Кол-во, кг</th><th class="num">Цена, р/кг</th><th class="num">Доставка, р/кг</th><th class="num">Итого, р/кг</th><th>Поставщик</th><th></th></tr></thead>
+          <tbody id="receipt-history"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="receipt-empty" style="display:none">Приёмок пока нет</div>
+    </div>
+  </div>
+
+  <!-- === СКЛАД === -->
+  <div class="panel" id="panel-stock">
+    <div class="card">
+      <div class="card-title">Текущие остатки</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Компонент</th><th class="num">Начальный, кг</th><th class="num">Приход, кг</th><th class="num">Расход, кг</th><th class="num">Текущий, кг</th></tr></thead>
+          <tbody id="stock-body"></tbody>
+        </table>
+      </div>
+      <div class="card-subtitle">Начальный остаток вводится вручную. Приход = сумма приёмок. Расход = сумма замесов.</div>
+    </div>
+  </div>
+
+  <!-- === ПОСТАВЩИКИ === -->
+  <div class="panel" id="panel-suppliers">
+    <div class="card">
+      <div class="card-title">Поставщики по компонентам</div>
+      <div id="suppliers-body"></div>
+    </div>
+  </div>
+
+  <!-- === ЗАМЕС === -->
+  <div class="panel" id="panel-mixer">
+    <div class="card">
+      <div class="card-title">Параметры замеса</div>
+      <div class="grid-3">
+        <div class="form-group">
+          <label>Нужно ПМД, кг</label>
+          <input type="number" class="num" id="mixer-target" value="20000" min="0" step="1000" oninput="calcMixer()">
+        </div>
+        <div class="form-group">
+          <label>Дата замеса</label>
+          <input type="date" id="mixer-date">
+        </div>
+        <div class="form-group">
+          <label>Толлинг Цемторг, р/кг</label>
+          <input type="number" class="num" id="mixer-tolling" value="2" min="0" step="0.1" oninput="calcMixer()">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="doBatch()">⚙️ Замес произошёл</button>
+      <div class="msg" id="mixer-msg"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Расчёт компонентов</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Компонент</th><th class="num">Нужно, кг</th><th class="num">На складе, кг</th><th class="num">Не хватает, кг</th><th>Статус</th></tr></thead>
+          <tbody id="mixer-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Рекомендации по закупке</div>
+      <div id="mixer-recommend"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Себестоимость замеса</div>
+      <div id="mixer-cost"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">История замесов</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>№</th><th>Дата</th><th class="num">ПМД, кг</th><th class="num">Себест., руб</th><th></th></tr></thead>
+          <tbody id="batch-history"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="batch-empty" style="display:none">Замесов пока нет</div>
+    </div>
+  </div>
+
+  <!-- === ГОДОВОЙ ПЛАН === -->
+  <div class="panel" id="panel-annual">
+    <div class="card">
+      <div class="card-title">Годовой план производства</div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Цель на 2026, кг</label>
+          <input type="number" class="num" id="annual-target" value="1015000" min="0" step="1000" oninput="calcAnnual()">
+        </div>
+        <div class="form-group">
+          <label>Толлинг Цемторг, р/кг</label>
+          <input type="number" class="num" id="annual-tolling" value="2" min="0" step="0.1" oninput="calcAnnual()">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Общая потребность компонентов</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Компонент</th><th class="num">Всего нужно, кг</th><th class="num">На складе, кг</th><th class="num">Докупить, кг</th><th>Статус</th></tr></thead>
+          <tbody id="annual-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Рекомендации по закупке</div>
+      <div id="annual-recommend"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Итоговая себестоимость</div>
+      <div id="annual-cost"></div>
+    </div>
+  </div>
+</div>
+
+<!-- === MODAL: АДМИН === -->
+<div class="modal-overlay" id="modal-admin">
+  <div class="modal">
+    <div class="modal-title">👥 Управление доступом</div>
+
+    <div class="modal-section">
+      <div class="modal-label">Код вашего проекта</div>
+      <div class="code-box">
+        <span id="admin-project-id">—</span>
+        <button class="btn btn-sm" onclick="copyProjectId()">📋 Копировать</button>
+      </div>
+      <div class="modal-hint">Отправьте этот код человеку, которому хотите дать доступ. Он введёт его при входе в разделе "Присоединиться к проекту".</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="modal-section">
+      <div class="modal-label">Добавить пользователя</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="email" id="admin-add-email" placeholder="Email пользователя" style="flex:1;min-width:200px">
+        <select id="admin-add-role" style="width:140px">
+          <option value="editor">Редактор</option>
+          <option value="viewer">Только просмотр</option>
+        </select>
+        <button class="btn btn-primary" onclick="addMember()">Добавить</button>
+      </div>
+      <div class="msg" id="admin-add-msg"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="modal-section">
+      <div class="modal-label">Пользователи с доступом</div>
+      <div id="admin-members-list"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-admin')">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<!-- === MODAL: БЭКАП === -->
+<div class="modal-overlay" id="modal-backup">
+  <div class="modal">
+    <div class="modal-title">💾 Бэкап и восстановление</div>
+    <div class="modal-section">
+      <div class="modal-label">Создать бэкап</div>
+      <button class="btn btn-primary" onclick="exportBackup()">📥 Скачать бэкап (.json)</button>
+      <div class="modal-hint">Сохранит все данные текущего проекта на ваш компьютер.</div>
+    </div>
+    <div class="divider"></div>
+    <div class="modal-section">
+      <div class="modal-label">Восстановить из бэкапа</div>
+      <input type="file" id="backup-file" accept=".json" onchange="importBackup(this)">
+      <div class="modal-hint">Выберите ранее сохранённый .json файл. Текущие данные проекта будут заменены!</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modal-backup')">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<script>
+// ==================== FIREBASE CONFIG ====================
+// ⚠️ ВСТАВЬТЕ СВОИ ДАННЫЕ ИЗ КОНСОЛИ FIREBASE (см. инструкцию в README)
+const firebaseConfig = {
+  apiKey: "AIzaSyB17PQvSy6t-0f0MA-31qb63gpEqrs6LWg",
+ authDomain: "pmd-calc.firebaseapp.com",
+ projectId: "pmd-calc",
+ storageBucket: "pmd-calc.firebasestorage.app",
+ messagingSenderId: "894300834230",
+ appId: "1:894300834230:web:2852cf9c9ace43f0af5917",
+ measurementId: "G-HHMYVYYG8Z"
+  };
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// Enable offline persistence
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+  console.warn('Persistence failed:', err.code);
+});
+
+// ==================== STATE ====================
+let currentUser = null;
+let currentProjectId = null;
+let userRole = 'owner'; // owner, editor, viewer
+let userProjects = []; // [{projectId, role, ownerEmail}]
+let unsubscribeProject = null;
+let unsubscribeMembers = null;
+
+let appData = {
+  recipe: [
+    { id:'slag', name:'Шлак молотый', pct:38, per1000:380 },
+    { id:'lime', name:'Известь негашеная', pct:30, per1000:300 },
+    { id:'mku', name:'МКУ-85', pct:12, per1000:120 },
+    { id:'sand', name:'Кварцевый песок молотый', pct:8, per1000:80 },
+    { id:'mineral', name:'Минеральный порошок', pct:5, per1000:50 },
+    { id:'fluorite', name:'Плавиковый шпат', pct:3, per1000:30 },
+    { id:'lignin', name:'Лигносульфонат', pct:4, per1000:40 }
+  ],
+  initialStock: {},
+  receipts: [],
+  batches: [],
+  suppliers: {},
+  batchCounter: 1,
+  settings: { annualTarget: 1015000, tollingPrice: 2 }
+};
+
+let recipeEditMode = false;
+let pendingSave = false;
+let saveTimeout = null;
+
+// ==================== AUTH ====================
+function showLogin() {
+  document.getElementById('auth-form-login').style.display = 'flex';
+  document.getElementById('auth-form-register').style.display = 'none';
+  document.getElementById('auth-form-join').style.display = 'none';
+  document.getElementById('auth-subtitle').textContent = 'Вход в систему';
+  hideAuthMessages();
+}
+
+function showRegister() {
+  document.getElementById('auth-form-login').style.display = 'none';
+  document.getElementById('auth-form-register').style.display = 'flex';
+  document.getElementById('auth-form-join').style.display = 'none';
+  document.getElementById('auth-subtitle').textContent = 'Создание аккаунта';
+  hideAuthMessages();
+}
+
+function showAdminModal() {
+  if (userRole !== 'owner') {
+    showToast('Только владелец может управлять доступом');
+    return;
+  }
+  // Get project ID from currentProjectId or from Firestore
+  if (!currentProjectId) {
+    showToast('Сначала загрузите проект');
+    return;
+  }
+  document.getElementById('admin-project-id').textContent = currentProjectId;
+  loadMembersList();
+  document.getElementById('modal-admin').classList.add('active');
+}
+
+function showJoin() {
+  document.getElementById('auth-form-login').style.display = 'none';
+  document.getElementById('auth-form-register').style.display = 'none';
+  document.getElementById('auth-form-join').style.display = 'flex';
+  document.getElementById('auth-subtitle').textContent = 'Присоединиться к проекту';
+  hideAuthMessages();
+}
+
+function hideAuthMessages() {
+  document.getElementById('auth-error').style.display = 'none';
+  document.getElementById('auth-success').style.display = 'none';
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  document.getElementById('auth-success').style.display = 'none';
+}
+
+function showAuthSuccess(msg) {
+  const el = document.getElementById('auth-success');
+  el.textContent = msg;
+  el.style.display = 'block';
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+function register() {
+  const email = document.getElementById('reg-email').value.trim();
+  const pass = document.getElementById('reg-password').value;
+  const pass2 = document.getElementById('reg-password2').value;
+
+  if (!email || !pass) { showAuthError('Введите email и пароль'); return; }
+  if (pass.length < 6) { showAuthError('Пароль должен быть минимум 6 символов'); return; }
+  if (pass !== pass2) { showAuthError('Пароли не совпадают'); return; }
+
+  auth.createUserWithEmailAndPassword(email, pass)
+    .then(cred => {
+      showAuthSuccess('Аккаунт создан! Настройка проекта...');
+      const uid = cred.user.uid;
+      // Create user profile and project
+      return db.collection('users').doc(uid).set({
+        email: email,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(() => {
+        // Create default project
+        return db.collection('projects').doc(uid).set({
+          ownerId: uid,
+          data: appData,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }).then(() => {
+        // Add to user's projects
+        return db.collection('userProjects').doc(uid).collection('projects').doc(uid).set({
+          role: 'owner',
+          addedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }).then(() => {
+        // Set current project and switch to it immediately
+        currentUser = cred.user;
+        currentProjectId = uid;
+        userRole = 'owner';
+        userProjects = [{ projectId: uid, role: 'owner' }];
+        showAppScreen();
+        updateProjectSelector();
+        switchProject(uid);
+      });
+    })
+    .catch(err => showAuthError(translateFirebaseError(err)));
+}
+
+function login() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+
+  if (!email || !pass) { showAuthError('Введите email и пароль'); return; }
+
+  auth.signInWithEmailAndPassword(email, pass)
+    .catch(err => showAuthError(translateFirebaseError(err)));
+}
+
+function logout() {
+  auth.signOut();
+}
+
+function translateFirebaseError(err) {
+  const codes = {
+    'auth/invalid-email': 'Неверный формат email',
+    'auth/user-disabled': 'Аккаунт заблокирован',
+    'auth/user-not-found': 'Пользователь не найден',
+    'auth/wrong-password': 'Неверный пароль',
+    'auth/email-already-in-use': 'Этот email уже зарегистрирован',
+    'auth/weak-password': 'Пароль слишком простой',
+    'auth/invalid-credential': 'Неверный email или пароль',
+    'auth/too-many-requests': 'Слишком много попыток. Попробуйте позже.'
+  };
+  return codes[err.code] || err.message;
+}
+
+// ==================== PROJECT MANAGEMENT ====================
+function loadUserProjects() {
+  if (!currentUser) return;
+
+  db.collection('userProjects').doc(currentUser.uid).collection('projects')
+    .onSnapshot(snapshot => {
+      const oldProjects = userProjects;
+      userProjects = [];
+      snapshot.forEach(doc => {
+        userProjects.push({
+          projectId: doc.id,
+          role: doc.data().role || 'editor',
+          ...doc.data()
+        });
+      });
+      updateProjectSelector();
+
+      // If no project selected, or previously had no projects but now has, select first one
+      if (userProjects.length > 0 && (!currentProjectId || oldProjects.length === 0)) {
+        switchProject(userProjects[0].projectId);
+      }
+    }, err => {
+      console.error('Error loading projects:', err);
+    });
+}
+
+function updateProjectSelector() {
+  const sel = document.getElementById('project-selector');
+  sel.innerHTML = userProjects.map(p => {
+    const isOwner = p.role === 'owner';
+    const label = isOwner ? 'Мой проект' : `Проект ${p.projectId.substr(0,8)}...`;
+    return `<option value="${p.projectId}">${label} (${p.role === 'owner' ? 'владелец' : p.role === 'editor' ? 'редактор' : 'наблюдатель'})</option>`;
+  }).join('');
+
+  if (currentProjectId) {
+    sel.value = currentProjectId;
+  }
+}
+
+function switchProject(projectId) {
+  if (!projectId || projectId === currentProjectId) return;
+
+  // Unsubscribe from old project
+  if (unsubscribeProject) unsubscribeProject();
+  if (unsubscribeMembers) unsubscribeMembers();
+
+  currentProjectId = projectId;
+  const projectInfo = userProjects.find(p => p.projectId === projectId);
+  userRole = projectInfo ? projectInfo.role : 'editor';
+
+  // Update UI
+  document.getElementById('user-role-badge').textContent = 
+    userRole === 'owner' ? 'владелец' : userRole === 'editor' ? 'редактор' : 'наблюдатель';
+  document.getElementById('btn-admin').style.display = userRole === 'owner' ? 'inline-flex' : 'none';
+
+  // Set read-only mode for viewers
+  const inputs = document.querySelectorAll('input, select, button:not(.tab):not(.btn-ghost)');
+  inputs.forEach(el => {
+    if (userRole === 'viewer') {
+      el.disabled = true;
+    } else {
+      el.disabled = false;
+    }
+  });
+
+  // Subscribe to project data
+  unsubscribeProject = db.collection('projects').doc(projectId)
+    .onSnapshot(doc => {
+      if (doc.exists) {
+        const data = doc.data().data;
+        if (data) {
+          appData = { ...appData, ...data };
+          // Ensure all fields exist
+          if (!appData.recipe) appData.recipe = getDefaultRecipe();
+          if (!appData.initialStock) appData.initialStock = {};
+          if (!appData.receipts) appData.receipts = [];
+          if (!appData.batches) appData.batches = [];
+          if (!appData.suppliers) appData.suppliers = {};
+          if (!appData.batchCounter) appData.batchCounter = 1;
+          if (!appData.settings) appData.settings = { annualTarget: 1015000, tollingPrice: 2 };
+
+          renderAll();
+        }
+      } else {
+        // Project doesn't exist, create it
+        if (userRole === 'owner') {
+          saveProjectData();
+        }
+      }
+    }, err => {
+      console.error('Error loading project:', err);
+      showToast('Ошибка загрузки проекта');
+    });
+
+  // Update project selector
+  updateProjectSelector();
+
+  showToast('Проект загружен');
+}
+
+function getDefaultRecipe() {
+  return [
+    { id:'slag', name:'Шлак молотый', pct:38, per1000:380 },
+    { id:'lime', name:'Известь негашеная', pct:30, per1000:300 },
+    { id:'mku', name:'МКУ-85', pct:12, per1000:120 },
+    { id:'sand', name:'Кварцевый песок молотый', pct:8, per1000:80 },
+    { id:'mineral', name:'Минеральный порошок', pct:5, per1000:50 },
+    { id:'fluorite', name:'Плавиковый шпат', pct:3, per1000:30 },
+    { id:'lignin', name:'Лигносульфонат', pct:4, per1000:40 }
+  ];
+}
+
+function saveProjectData() {
+  if (!currentProjectId || !currentUser) return;
+  if (userRole === 'viewer') {
+    showToast('У вас права только на просмотр');
+    return;
+  }
+
+  // Debounce saves
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    db.collection('projects').doc(currentProjectId).set({
+      ownerId: currentUser.uid,
+      data: appData,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true }).then(() => {
+      showToast('Сохранено в облаке');
+    }).catch(err => {
+      console.error('Save error:', err);
+      showToast('Ошибка сохранения (данные сохранены локально)');
+    });
+  }, 500);
+}
+
+function joinProject() {
+  const code = document.getElementById('join-code').value.trim();
+  if (!code) { showAuthError('Введите код проекта'); return; }
+
+  // Check if project exists
+  db.collection('projects').doc(code).get().then(doc => {
+    if (!doc.exists) {
+      showAuthError('Проект не найден. Проверьте код.');
+      return;
+    }
+
+    const projectData = doc.data();
+    const ownerId = projectData.ownerId;
+
+    // Check if there's a pending invitation for this user
+    const userEmail = currentUser.email.toLowerCase();
+
+    db.collection('projects').doc(code).collection('invitations')
+      .where('email', '==', userEmail)
+      .where('status', '==', 'pending')
+      .get()
+      .then(inviteSnapshot => {
+        let role = 'editor'; // default role
+
+        if (!inviteSnapshot.empty) {
+          // Use invitation role
+          inviteSnapshot.forEach(inviteDoc => {
+            role = inviteDoc.data().role || 'editor';
+            // Mark as accepted
+            inviteDoc.ref.update({
+              status: 'accepted',
+              acceptedBy: currentUser.uid,
+              acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          });
+        }
+
+        // Add user to project members
+        return db.collection('projectMembers').doc(code).collection('members').doc(currentUser.uid).set({
+          email: userEmail,
+          role: role,
+          addedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }).then(() => {
+          // Add project to user's projects
+          return db.collection('userProjects').doc(currentUser.uid).collection('projects').doc(code).set({
+            role: role,
+            addedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }).then(() => {
+          showAuthSuccess('Вы присоединились к проекту! Переходим...');
+          setTimeout(() => {
+            switchProject(code);
+            showAppScreen();
+          }, 1000);
+        });
+      });
+  }).catch(err => {
+    showAuthError('Ошибка: ' + err.message);
+  });
+}
+
+// ==================== ADMIN ====================
+function loadMembersList() {
+  if (!currentProjectId) return;
+
+  const container = document.getElementById('admin-members-list');
+  container.innerHTML = '<div class="empty">Загрузка...</div>';
+
+  // Get project doc to find owner
+  db.collection('projects').doc(currentProjectId).get().then(projDoc => {
+    const ownerId = projDoc.exists ? projDoc.data().ownerId : null;
+
+    // Get members from projectMembers collection
+    db.collection('projectMembers').doc(currentProjectId).collection('members').get()
+      .then(snapshot => {
+        if (snapshot.empty && !ownerId) {
+          container.innerHTML = '<div class="empty">Пока нет других пользователей</div>';
+          return;
+        }
+
+        let html = '';
+
+        // Add owner first
+        if (ownerId && currentUser && ownerId === currentUser.uid) {
+          html += `
+            <div class="member-row">
+              <div class="member-info">
+                <div class="member-email">${currentUser.email} (вы)</div>
+                <div class="member-role">Владелец</div>
+              </div>
+              <span class="badge badge-neutral">владелец</span>
+            </div>
+          `;
+        }
+
+        // Add other members
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const isYou = doc.id === currentUser.uid;
+          const isOwner = doc.id === ownerId;
+
+          if (isOwner) return; // Skip owner, already shown above
+
+          html += `
+            <div class="member-row">
+              <div class="member-info">
+                <div class="member-email">${data.email || 'Без email'}</div>
+                <div class="member-role">${data.role === 'owner' ? 'Владелец' : data.role === 'editor' ? 'Редактор' : 'Наблюдатель'}</div>
+              </div>
+              ${!isYou ? `<button class="btn btn-xs btn-danger" onclick="removeMember('${doc.id}', '${data.email || ''}')">Отозвать доступ</button>` : ''}
+            </div>
+          `;
+        });
+
+        if (html === '') {
+          container.innerHTML = '<div class="empty">Пока нет других пользователей</div>';
+        } else {
+          container.innerHTML = html;
+        }
+      }).catch(err => {
+        console.error('Error loading members:', err);
+        container.innerHTML = '<div class="empty">Ошибка загрузки: ' + err.message + '</div>';
+      });
+  }).catch(err => {
+    container.innerHTML = '<div class="empty">Ошибка загрузки проекта</div>';
+  });
+}
+
+function addMember() {
+  const email = document.getElementById('admin-add-email').value.trim().toLowerCase();
+  const role = document.getElementById('admin-add-role').value;
+  const msg = document.getElementById('admin-add-msg');
+
+  if (!email) {
+    msg.textContent = 'Введите email';
+    msg.className = 'msg msg-err';
+    msg.style.display = 'block';
+    return;
+  }
+
+  if (!currentProjectId) {
+    msg.textContent = 'Ошибка: проект не загружен';
+    msg.className = 'msg msg-err';
+    msg.style.display = 'block';
+    return;
+  }
+
+  // Add invitation to the project
+  const inviteId = 'invite_' + Date.now();
+  db.collection('projects').doc(currentProjectId).collection('invitations').doc(inviteId).set({
+    email: email,
+    role: role,
+    status: 'pending',
+    createdBy: currentUser.uid,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(() => {
+    msg.textContent = 'Приглашение создано! Отправьте пользователю код проекта: ' + currentProjectId;
+    msg.className = 'msg msg-ok';
+    msg.style.display = 'block';
+    document.getElementById('admin-add-email').value = '';
+    loadMembersList();
+  }).catch(err => {
+    msg.textContent = 'Ошибка: ' + err.message;
+    msg.className = 'msg msg-err';
+    msg.style.display = 'block';
+  });
+}
+
+function removeMember(uid, email) {
+  if (!confirm('Отозвать доступ у этого пользователя?')) return;
+  if (!currentProjectId) return;
+
+  // Remove from projectMembers
+  db.collection('projectMembers').doc(currentProjectId).collection('members').doc(uid).delete()
+    .then(() => {
+      // Also remove from user's project list
+      return db.collection('userProjects').doc(uid).collection('projects').doc(currentProjectId).delete();
+    })
+    .then(() => {
+      // Also delete any pending invitations for this email
+      return db.collection('projects').doc(currentProjectId).collection('invitations')
+        .where('email', '==', email).get();
+    })
+    .then(snapshot => {
+      const batch = db.batch();
+      snapshot.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      return batch.commit();
+    })
+    .then(() => {
+      loadMembersList();
+      showToast('Доступ отозван');
+    }).catch(err => {
+      showToast('Ошибка: ' + err.message);
+    });
+}
+
+function copyProjectId() {
+  navigator.clipboard.writeText(currentProjectId).then(() => {
+    showToast('Код скопирован!');
+  });
+}
+
+// ==================== AUTH STATE LISTENER ====================
+auth.onAuthStateChanged(user => {
+  if (user) {
+    // Only set if not already set (e.g., from register)
+    if (!currentUser) currentUser = user;
+    document.getElementById('user-email').textContent = user.email;
+    showAppScreen();
+    loadUserProjects();
+    // Delay checkInvitations to ensure projects are loaded
+    setTimeout(checkInvitations, 2000);
+  } else {
+    currentUser = null;
+    currentProjectId = null;
+    userRole = 'owner';
+    userProjects = [];
+    if (unsubscribeProject) unsubscribeProject();
+    if (unsubscribeMembers) unsubscribeMembers();
+    showAuthScreen();
+  }
+  document.getElementById('loading-screen').classList.add('hidden');
+});
+
+function showAuthScreen() {
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display = 'none';
+  showLogin();
+}
+
+function showAppScreen() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+}
+
+function checkInvitations() {
+  if (!currentUser || !currentUser.email) return;
+
+  const userEmail = currentUser.email.toLowerCase();
+
+  // Check all projects this user has access to for pending invitations
+  db.collection('userProjects').doc(currentUser.uid).collection('projects').get()
+    .then(snapshot => {
+      snapshot.forEach(doc => {
+        const projectId = doc.id;
+        // Check invitations in this project
+        db.collection('projects').doc(projectId).collection('invitations')
+          .where('email', '==', userEmail)
+          .where('status', '==', 'pending')
+          .get()
+          .then(inviteSnapshot => {
+            inviteSnapshot.forEach(inviteDoc => {
+              const invite = inviteDoc.data();
+              // Auto-accept: add to projectMembers
+              db.collection('projectMembers').doc(projectId).collection('members').doc(currentUser.uid).set({
+                email: userEmail,
+                role: invite.role || 'editor',
+                addedAt: firebase.firestore.FieldValue.serverTimestamp()
+              }).then(() => {
+                // Update invitation status
+                inviteDoc.ref.update({
+                  status: 'accepted',
+                  acceptedBy: currentUser.uid,
+                  acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+              });
+            });
+          });
+      });
+    }).catch(err => console.log('No invitations or error:', err));
+}
+
+// ==================== UTILITY ====================
+function genId() {
+  return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2,5);
+}
+
+function fmt(n) {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(n));
+}
+function fmt2(n) {
+  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+
+function getStock(cid) {
+  const init = parseFloat(appData.initialStock[cid]) || 0;
+  const rec = (appData.receipts || []).filter(r => r.componentId === cid).reduce((s, r) => s + (parseFloat(r.qty) || 0), 0);
+  const spent = (appData.batches || []).reduce((s, b) => s + (b.components[cid] || 0), 0);
+  return init + rec - spent;
+}
+
+function getPrice(cid) {
+  const recs = (appData.receipts || []).filter(r => r.componentId === cid);
+  if (recs.length === 0) return 0;
+  let total = 0, qty = 0;
+  recs.forEach(r => {
+    const q = parseFloat(r.qty) || 0;
+    const p = (parseFloat(r.price) || 0) + (parseFloat(r.delivery) || 0);
+    total += q * p;
+    qty += q;
+  });
+  return qty > 0 ? total / qty : 0;
+}
+
+function getComponentName(cid) {
+  const c = (appData.recipe || []).find(r => r.id === cid);
+  return c ? c.name : cid;
+}
+
+function getSupplierName(cid, sid) {
+  const sups = (appData.suppliers || {})[cid] || [];
+  const s = sups.find(x => x.id === sid);
+  return s ? (s.company || s.person || 'Без названия') : '—';
+}
+
+function showToast(text) {
+  const toast = document.getElementById('toast');
+  toast.textContent = text;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('active'); });
+});
+
+// ==================== RENDER ALL ====================
+function renderAll() {
+  renderRecipe();
+  renderStock();
+  calcMixer();
+  calcAnnual();
+  renderSuppliers();
+  populateReceiptComp();
+  updateReceiptSuppliers();
+  renderReceiptHistory();
+  renderBatchHistory();
+}
+
+// ==================== TABS ====================
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'stock') renderStock();
+    if (tab.dataset.tab === 'mixer') calcMixer();
+    if (tab.dataset.tab === 'annual') calcAnnual();
+    if (tab.dataset.tab === 'suppliers') renderSuppliers();
+    if (tab.dataset.tab === 'receipt') {
+      renderReceiptHistory();
+      populateReceiptComp();
+      updateReceiptSuppliers();
+    }
+  });
+});
+
+// ==================== РЕЦЕПТ ====================
+function renderRecipe() {
+  const container = document.getElementById('recipe-content');
+  const btn = document.getElementById('recipe-edit-btn');
+  const err = document.getElementById('recipe-error');
+  err.style.display = 'none';
+
+  if (recipeEditMode) {
+    btn.textContent = '💾 Сохранить';
+    let html = '<div class="table-wrap"><table><thead><tr><th>Компонент</th><th class="num">Масс. доля %</th><th class="num">Расход на 1000 кг</th></tr></thead><tbody>';
+    (appData.recipe || []).forEach((c, i) => {
+      html += `<tr>
+        <td>${c.name}</td>
+        <td class="num"><input type="number" class="num" id="recipe-pct-${i}" value="${c.pct}" min="0" max="100" step="0.1" style="width:90px;display:inline-block" oninput="updateRecipeRow(${i})"></td>
+        <td class="num" id="recipe-per1000-${i}">${c.per1000}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+  } else {
+    btn.textContent = '✏️ Редактировать';
+    let html = '<div class="table-wrap"><table><thead><tr><th>Компонент</th><th class="num">Масс. доля %</th><th class="num">Расход на 1000 кг, кг</th></tr></thead><tbody>';
+    (appData.recipe || []).forEach(c => {
+      html += `<tr><td>${c.name}</td><td class="num">${c.pct}%</td><td class="num">${c.per1000}</td></tr>`;
+    });
+    html += `<tr style="font-weight:600"><td>Итого</td><td class="num">${(appData.recipe || []).reduce((s,c)=>s+c.pct,0)}%</td><td class="num">1000</td></tr>`;
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+  }
+}
+
+function updateRecipeRow(i) {
+  const pct = parseFloat(document.getElementById('recipe-pct-'+i).value) || 0;
+  document.getElementById('recipe-per1000-'+i).textContent = Math.round(pct * 10);
+}
+
+function toggleRecipeEdit() {
+  if (recipeEditMode) {
+    let total = 0;
+    const newRecipe = (appData.recipe || []).map((c, i) => {
+      const pct = parseFloat(document.getElementById('recipe-pct-'+i).value) || 0;
+      total += pct;
+      return { ...c, pct: pct, per1000: Math.round(pct * 10) };
+    });
+    if (Math.abs(total - 100) > 0.01) {
+      const err = document.getElementById('recipe-error');
+      err.textContent = 'Ошибка: сумма долей должна быть ровно 100%. Сейчас: ' + total.toFixed(1) + '%';
+      err.style.display = 'block';
+      return;
+    }
+    appData.recipe = newRecipe;
+    saveProjectData();
+    document.getElementById('recipe-error').style.display = 'none';
+    recipeEditMode = false;
+    renderRecipe();
+    calcMixer();
+    calcAnnual();
+    showToast('Рецепт сохранён');
+  } else {
+    recipeEditMode = true;
+    renderRecipe();
+  }
+}
+
+// ==================== СКЛАД ====================
+function renderStock() {
+  const tbody = document.getElementById('stock-body');
+  tbody.innerHTML = (appData.recipe || []).map(c => {
+    const init = parseFloat(appData.initialStock[c.id]) || 0;
+    const rec = (appData.receipts || []).filter(r => r.componentId === c.id).reduce((s, r) => s + (parseFloat(r.qty) || 0), 0);
+    const spent = (appData.batches || []).reduce((s, b) => s + (b.components[c.id] || 0), 0);
+    const current = init + rec - spent;
+    return `
+      <tr>
+        <td>${c.name}</td>
+        <td class="num"><input type="number" class="num" value="${init}" min="0" step="100" style="width:100px" onchange="appData.initialStock['${c.id}']=parseFloat(this.value)||0;saveProjectData();renderStock();calcMixer();calcAnnual();" ${userRole==='viewer'?'disabled':''}></td>
+        <td class="num">${fmt(rec)}</td>
+        <td class="num">${fmt(spent)}</td>
+        <td class="num" style="font-weight:600;color:${current<0?'var(--danger)':'var(--text-primary)'}">${fmt(current)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// ==================== ПРИЁМКА ====================
+function populateReceiptComp() {
+  const sel = document.getElementById('receipt-comp');
+  sel.innerHTML = '<option value="">Выберите...</option>' + (appData.recipe || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+function updateReceiptSuppliers() {
+  const cid = document.getElementById('receipt-comp').value;
+  const sel = document.getElementById('receipt-sup');
+  if (!cid) {
+    sel.innerHTML = '<option value="">Сначала выберите материал</option>';
+    return;
+  }
+  const sups = (appData.suppliers || {})[cid] || [];
+  if (sups.length === 0) {
+    sel.innerHTML = '<option value="">Нет поставщиков — добавьте в разделе Поставщики</option>';
+    return;
+  }
+  sel.innerHTML = sups.map(s => `<option value="${s.id}">${s.company || s.person || 'Без названия'}</option>`).join('');
+}
+
+function addReceipt() {
+  if (userRole === 'viewer') { showToast('У вас права только на просмотр'); return; }
+
+  const cid = document.getElementById('receipt-comp').value;
+  const qty = parseFloat(document.getElementById('receipt-qty').value) || 0;
+  const sid = document.getElementById('receipt-sup').value;
+  const price = parseFloat(document.getElementById('receipt-price').value) || 0;
+  const delivery = parseFloat(document.getElementById('receipt-delivery').value) || 0;
+  const date = document.getElementById('receipt-date').value;
+  const msg = document.getElementById('receipt-msg');
+
+  if (!cid) { msg.textContent = 'Выберите материал'; msg.className = 'msg msg-err'; msg.style.display = 'block'; return; }
+  if (qty <= 0) { msg.textContent = 'Введите количество'; msg.className = 'msg msg-err'; msg.style.display = 'block'; return; }
+  if (!sid) { msg.textContent = 'Выберите поставщика'; msg.className = 'msg msg-err'; msg.style.display = 'block'; return; }
+
+  if (!appData.receipts) appData.receipts = [];
+  appData.receipts.push({ id: genId(), componentId: cid, qty: qty, supplierId: sid, price: price, delivery: delivery, date: date });
+  saveProjectData();
+  msg.textContent = `Приёмка добавлена: ${getComponentName(cid)} +${fmt(qty)} кг`;
+  msg.className = 'msg msg-ok';
+  msg.style.display = 'block';
+
+  document.getElementById('receipt-qty').value = '';
+  document.getElementById('receipt-price').value = '';
+  document.getElementById('receipt-delivery').value = '';
+  renderReceiptHistory();
+  renderStock();
+  calcMixer();
+  calcAnnual();
+  showToast('Приёмка добавлена');
+}
+
+function renderReceiptHistory() {
+  const tbody = document.getElementById('receipt-history');
+  const empty = document.getElementById('receipt-empty');
+  if (!appData.receipts || appData.receipts.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  const sorted = [...appData.receipts].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  tbody.innerHTML = sorted.map(r => {
+    const totalPrice = (parseFloat(r.price)||0) + (parseFloat(r.delivery)||0);
+    return `
+      <tr class="hist-item">
+        <td>${r.date || '—'}</td>
+        <td>${getComponentName(r.componentId)}</td>
+        <td class="num">${fmt(r.qty)}</td>
+        <td class="num">${fmt2(r.price||0)}</td>
+        <td class="num">${fmt2(r.delivery||0)}</td>
+        <td class="num" style="font-weight:600">${fmt2(totalPrice)}</td>
+        <td>${getSupplierName(r.componentId, r.supplierId)}</td>
+        <td class="num">
+          <button class="btn btn-xs btn-danger actions" onclick="deleteReceipt('${r.id}')" ${userRole==='viewer'?'disabled':''}>×</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function deleteReceipt(id) {
+  if (userRole === 'viewer') return;
+  appData.receipts = (appData.receipts || []).filter(r => r.id !== id);
+  saveProjectData();
+  renderReceiptHistory();
+  renderStock();
+  calcMixer();
+  calcAnnual();
+  showToast('Приёмка удалена');
+}
+
+// ==================== ПОСТАВЩИКИ ====================
+function renderSuppliers() {
+  const container = document.getElementById('suppliers-body');
+  container.innerHTML = (appData.recipe || []).map(c => {
+    const sups = (appData.suppliers || {})[c.id] || [];
+    let html = `<div class="sup-card">`;
+    html += `<div class="sup-card-header">`;
+    html += `<div class="sup-card-title">${c.name}</div>`;
+    html += `<button class="btn btn-sm" onclick="addSupplier('${c.id}')" ${userRole==='viewer'?'disabled':''}>+ Добавить поставщика</button>`;
+    html += `</div>`;
+
+    if (sups.length === 0) {
+      html += `<div class="empty" style="padding:15px">Поставщиков пока нет</div>`;
+    } else {
+      html += `<div style="font-size:12px;color:var(--text-tertiary);margin-bottom:10px">${sups.length} поставщик(ов)</div>`;
+      sups.forEach((s, idx) => {
+        html += `<div class="sup-grid" style="margin-bottom:8px">`;
+        html += `<input placeholder="Компания" value="${s.company}" onchange="updateSupplier('${c.id}','${s.id}','company',this.value)" style="font-size:13px" ${userRole==='viewer'?'disabled':''}>`;
+        html += `<input placeholder="Телефон" value="${s.phone}" onchange="updateSupplier('${c.id}','${s.id}','phone',this.value)" style="font-size:13px" ${userRole==='viewer'?'disabled':''}>`;
+        html += `<input placeholder="Email" value="${s.email}" onchange="updateSupplier('${c.id}','${s.id}','email',this.value)" style="font-size:13px" ${userRole==='viewer'?'disabled':''}>`;
+        html += `<input placeholder="ФИО" value="${s.person}" onchange="updateSupplier('${c.id}','${s.id}','person',this.value)" style="font-size:13px" ${userRole==='viewer'?'disabled':''}>`;
+        html += `<button class="btn btn-xs btn-danger" style="grid-column:span 1" onclick="deleteSupplier('${c.id}','${s.id}')" ${userRole==='viewer'?'disabled':''}>Удалить</button>`;
+        html += `</div>`;
+      });
+    }
+    html += `</div>`;
+    return html;
+  }).join('');
+}
+
+function addSupplier(cid) {
+  if (userRole === 'viewer') return;
+  if (!appData.suppliers) appData.suppliers = {};
+  if (!appData.suppliers[cid]) appData.suppliers[cid] = [];
+  appData.suppliers[cid].push({ id: genId(), company:'', phone:'', email:'', person:'' });
+  saveProjectData();
+  renderSuppliers();
+  updateReceiptSuppliers();
+}
+
+function updateSupplier(cid, sid, field, val) {
+  if (userRole === 'viewer') return;
+  const s = ((appData.suppliers || {})[cid] || []).find(x => x.id === sid);
+  if (s) s[field] = val;
+  saveProjectData();
+  calcMixer();
+  calcAnnual();
+}
+
+function deleteSupplier(cid, sid) {
+  if (userRole === 'viewer') return;
+  if (!appData.suppliers) appData.suppliers = {};
+  appData.suppliers[cid] = (appData.suppliers[cid] || []).filter(s => s.id !== sid);
+  saveProjectData();
+  renderSuppliers();
+  updateReceiptSuppliers();
+  calcMixer();
+  calcAnnual();
+  showToast('Поставщик удалён');
+}
+
+// ==================== ЗАМЕС ====================
+function calcMixer() {
+  const target = parseFloat(document.getElementById('mixer-target').value) || 0;
+  const tolling = parseFloat(document.getElementById('mixer-tolling').value) || 0;
+
+  const tbody = document.getElementById('mixer-body');
+  const recommend = document.getElementById('mixer-recommend');
+  const costDiv = document.getElementById('mixer-cost');
+
+  let totalMaterialCost = 0;
+  let rows = [];
+  let shortfalls = [];
+
+  (appData.recipe || []).forEach(c => {
+    const need = target * c.per1000 / 1000;
+    const stock = getStock(c.id);
+    const missing = Math.max(0, need - stock);
+    const price = getPrice(c.id);
+    const cost = need * price;
+    totalMaterialCost += cost;
+
+    let status = '<span class="badge badge-ok">✓ Хватает</span>';
+    let fillClass = 'fill-ok';
+    let pct = stock > 0 ? Math.min(100, (stock/need)*100) : 0;
+    if (missing > 0) {
+      if (stock > 0) {
+        status = '<span class="badge badge-warn">⚠ Частично</span>';
+        fillClass = 'fill-warn';
+      } else {
+        status = '<span class="badge badge-err">✗ Нет</span>';
+        fillClass = 'fill-err';
+      }
+      shortfalls.push({ name: c.name, missing: missing, price: price });
+    }
+
+    rows.push(`
+      <tr>
+        <td>${c.name}</td>
+        <td class="num">${fmt(need)}</td>
+        <td class="num">${fmt(stock)}</td>
+        <td class="num" style="color:${missing>0?'var(--danger)':'var(--positive)'};font-weight:${missing>0?600:400}">${fmt(missing)}</td>
+        <td>${status}<div class="progress-bar"><div class="progress-fill ${fillClass}" style="width:${pct}%"></div></div></td>
+      </tr>
+    `);
+  });
+
+  tbody.innerHTML = rows.join('');
+
+  if (shortfalls.length === 0) {
+    recommend.innerHTML = '<div class="badge badge-ok">Все компоненты в достаточном количестве. Можно начинать замес.</div>';
+  } else {
+    let recHtml = '<div class="table-wrap"><table><thead><tr><th>Компонент</th><th class="num">Докупить, кг</th><th class="num">Цена с доставкой, р/кг</th><th class="num">Сумма, руб</th></tr></thead><tbody>';
+    let recTotal = 0;
+    shortfalls.forEach(s => {
+      const sum = s.missing * s.price;
+      recTotal += sum;
+      recHtml += `<tr><td>${s.name}</td><td class="num">${fmt(s.missing)}</td><td class="num">${fmt2(s.price)}</td><td class="num">${fmt2(sum)}</td></tr>`;
+    });
+    recHtml += `<tr style="font-weight:600"><td colspan="3">Итого к закупке</td><td class="num">${fmt2(recTotal)}</td></tr></tbody></table></div>`;
+    recommend.innerHTML = recHtml;
+  }
+
+  const tollingCost = target * tolling;
+  const totalCost = totalMaterialCost + tollingCost;
+  const costPerKg = target > 0 ? totalCost / target : 0;
+
+  costDiv.innerHTML = `
+    <div class="summary-box ${totalCost <= 0 ? 'summary-box-neg' : ''}">
+      <div class="summary-row"><span class="label">Сырье и материалы</span><span class="value">${fmt2(totalMaterialCost)} руб</span></div>
+      <div class="summary-row"><span class="label">Толлинг Цемторг (${fmt(target)} кг × ${fmt2(tolling)} р)</span><span class="value">${fmt2(tollingCost)} руб</span></div>
+      <div class="summary-row sum"><span class="label">Общая себестоимость</span><span class="value">${fmt2(totalCost)} руб</span></div>
+      <div class="summary-row" style="margin-top:4px"><span class="label">Себестоимость 1 кг ПМД</span><span class="value" style="font-weight:600">${fmt2(costPerKg)} руб</span></div>
+    </div>
+  `;
+
+  renderBatchHistory();
+}
+
+function doBatch() {
+  if (userRole === 'viewer') { showToast('У вас права только на просмотр'); return; }
+
+  const target = parseFloat(document.getElementById('mixer-target').value) || 0;
+  const date = document.getElementById('mixer-date').value;
+  const tolling = parseFloat(document.getElementById('mixer-tolling').value) || 0;
+  const msg = document.getElementById('mixer-msg');
+
+  if (target <= 0) {
+    msg.innerHTML = '<span class="badge badge-err">Введите количество ПМД</span>';
+    msg.className = 'msg msg-err';
+    msg.style.display = 'block';
+    return;
+  }
+
+  let enough = true;
+  let short = [];
+  (appData.recipe || []).forEach(c => {
+    const need = target * c.per1000 / 1000;
+    const stock = getStock(c.id);
+    if (stock < need) {
+      enough = false;
+      short.push(`${c.name}: не хватает ${fmt(need - stock)} кг`);
+    }
+  });
+
+  if (!enough) {
+    msg.innerHTML = '<span class="badge badge-err">Недостаточно материалов:</span><br><span style="font-size:13px;color:var(--text-tertiary)">' + short.join('<br>') + '</span>';
+    msg.className = 'msg msg-err';
+    msg.style.display = 'block';
+    return;
+  }
+
+  const components = {};
+  (appData.recipe || []).forEach(c => {
+    components[c.id] = target * c.per1000 / 1000;
+  });
+
+  let totalMaterialCost = 0;
+  (appData.recipe || []).forEach(c => {
+    totalMaterialCost += components[c.id] * getPrice(c.id);
+  });
+  const tollingCost = target * tolling;
+  const totalCost = totalMaterialCost + tollingCost;
+
+  if (!appData.batches) appData.batches = [];
+  appData.batches.push({
+    id: genId(),
+    num: appData.batchCounter || 1,
+    date: date,
+    target: target,
+    components: components,
+    tolling: tolling,
+    totalCost: totalCost
+  });
+  appData.batchCounter = (appData.batchCounter || 1) + 1;
+
+  saveProjectData();
+  msg.innerHTML = '<span class="badge badge-ok">Замес №' + (appData.batchCounter - 1) + ' зафиксирован на ' + (date || '—') + '</span>';
+  msg.className = 'msg msg-ok';
+  msg.style.display = 'block';
+  renderStock();
+  calcMixer();
+  calcAnnual();
+  showToast('Замес зафиксирован');
+}
+
+function renderBatchHistory() {
+  const tbody = document.getElementById('batch-history');
+  const empty = document.getElementById('batch-empty');
+  if (!appData.batches || appData.batches.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  const sorted = [...appData.batches].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  tbody.innerHTML = sorted.map(b => `
+    <tr class="hist-item">
+      <td style="font-weight:600">${b.num}</td>
+      <td>${b.date || '—'}</td>
+      <td class="num">${fmt(b.target)}</td>
+      <td class="num" style="font-weight:600">${fmt2(b.totalCost)}</td>
+      <td class="num">
+        <button class="btn btn-xs btn-danger actions" onclick="deleteBatch('${b.id}')" ${userRole==='viewer'?'disabled':''}>×</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function deleteBatch(id) {
+  if (userRole === 'viewer') return;
+  appData.batches = (appData.batches || []).filter(b => b.id !== id);
+  saveProjectData();
+  renderStock();
+  calcMixer();
+  calcAnnual();
+  showToast('Замес удалён');
+}
+
+// ==================== ГОДОВОЙ ПЛАН ====================
+function calcAnnual() {
+  const target = parseFloat(document.getElementById('annual-target').value) || 0;
+  const tolling = parseFloat(document.getElementById('annual-tolling').value) || 0;
+
+  const tbody = document.getElementById('annual-body');
+  const recommend = document.getElementById('annual-recommend');
+  const costDiv = document.getElementById('annual-cost');
+
+  let totalMaterialCost = 0;
+  let rows = [];
+  let shortfalls = [];
+
+  (appData.recipe || []).forEach(c => {
+    const need = target * c.per1000 / 1000;
+    const stock = getStock(c.id);
+    const toBuy = Math.max(0, need - stock);
+    const price = getPrice(c.id);
+    const cost = need * price;
+    totalMaterialCost += cost;
+
+    let status = '<span class="badge badge-ok">✓ OK</span>';
+    let fillClass = 'fill-ok';
+    let pct = need > 0 ? Math.min(100, (stock/need)*100) : 0;
+    if (toBuy > 0) {
+      status = '<span class="badge badge-err">✗ Закупить</span>';
+      fillClass = 'fill-err';
+      shortfalls.push({ name: c.name, toBuy: toBuy, price: price, totalCost: toBuy * price });
+    }
+
+    rows.push(`
+      <tr>
+        <td>${c.name}</td>
+        <td class="num">${fmt(need)}</td>
+        <td class="num">${fmt(stock)}</td>
+        <td class="num" style="color:${toBuy>0?'var(--danger)':'var(--text-tertiary)'};font-weight:${toBuy>0?600:400}">${fmt(toBuy)}</td>
+        <td>${status}<div class="progress-bar"><div class="progress-fill ${fillClass}" style="width:${pct}%"></div></div></td>
+      </tr>
+    `);
+  });
+
+  tbody.innerHTML = rows.join('');
+
+  if (shortfalls.length === 0) {
+    recommend.innerHTML = '<div class="badge badge-ok">Текущих запасов достаточно для выполнения годового плана!</div>';
+  } else {
+    let recHtml = '<div class="table-wrap"><table><thead><tr><th>Компонент</th><th class="num">Докупить, кг</th><th class="num">Цена с доставкой, р/кг</th><th class="num">Сумма, руб</th></tr></thead><tbody>';
+    let recTotal = 0;
+    shortfalls.forEach(s => {
+      recTotal += s.totalCost;
+      recHtml += `<tr><td>${s.name}</td><td class="num">${fmt(s.toBuy)}</td><td class="num">${fmt2(s.price)}</td><td class="num">${fmt2(s.totalCost)}</td></tr>`;
+    });
+    recHtml += `<tr style="font-weight:600"><td colspan="3">Итого к закупке</td><td class="num">${fmt2(recTotal)}</td></tr></tbody></table></div>`;
+    recommend.innerHTML = recHtml;
+  }
+
+  const tollingCost = target * tolling;
+  const totalCost = totalMaterialCost + tollingCost;
+  const costPerKg = target > 0 ? totalCost / target : 0;
+
+  costDiv.innerHTML = `
+    <div class="summary-box">
+      <div class="summary-row"><span class="label">Годовая цель производства</span><span class="value">${fmt(target)} кг</span></div>
+      <div class="divider" style="margin:8px 0"></div>
+      <div class="summary-row"><span class="label">Сырье и материалы</span><span class="value">${fmt2(totalMaterialCost)} руб</span></div>
+      <div class="summary-row"><span class="label">Толлинг Цемторг (${fmt(target)} кг × ${fmt2(tolling)} р)</span><span class="value">${fmt2(tollingCost)} руб</span></div>
+      <div class="summary-row sum"><span class="label">Общая годовая себестоимость</span><span class="value">${fmt2(totalCost)} руб</span></div>
+      <div class="summary-row" style="margin-top:4px"><span class="label">Себестоимость 1 кг ПМД</span><span class="value" style="font-weight:600">${fmt2(costPerKg)} руб</span></div>
+    </div>
+  `;
+}
+
+// ==================== БЭКАП ====================
+function showBackupModal() {
+  document.getElementById('modal-backup').classList.add('active');
+}
+
+function exportBackup() {
+  const blob = new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pmd_backup_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Бэкап скачан');
+}
+
+function importBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      if (confirm('Текущие данные проекта будут заменены бэкапом. Продолжить?')) {
+        appData = { ...appData, ...parsed };
+        if (!appData.recipe) appData.recipe = getDefaultRecipe();
+        saveProjectData();
+        renderAll();
+        showToast('Бэкап восстановлен');
+      }
+    } catch(err) {
+      alert('Ошибка чтения файла: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// ==================== OFFLINE DETECTION ====================
+window.addEventListener('online', () => {
+  document.getElementById('offline-bar').classList.remove('show');
+  showToast('Подключение восстановлено');
+});
+window.addEventListener('offline', () => {
+  document.getElementById('offline-bar').classList.add('show');
+});
+
+// ==================== INIT ====================
+window.addEventListener('DOMContentLoaded', () => {
+  // Set today's date
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('receipt-date').value = today;
+  document.getElementById('mixer-date').value = today;
+
+  // Check if Firebase is properly configured
+  if (firebaseConfig.apiKey === 'ВАШ_API_KEY') {
+    document.getElementById('loading-text').textContent = 'Firebase не настроен. См. инструкцию в README.';
+    setTimeout(() => {
+      document.getElementById('loading-screen').classList.add('hidden');
+      showAuthScreen();
+    }, 2000);
+  }
+});
+</script>
+</body>
+</html>
